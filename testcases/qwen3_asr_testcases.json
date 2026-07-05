@@ -58,5 +58,18 @@
     "ncnn_text": "By by by by by by by by by by ...",
     "match": false,
     "note": "Artificial stress sample. Not a semantic correctness benchmark; tracks long-audio chunk stitching limitation."
+  },
+  {
+    "name": "long_text_numbers_fast",
+    "type": "synthetic_long_text_capacity",
+    "duration_seconds": 2.22,
+    "source": "Generated with espeak-ng",
+    "prepared_wav": "long_text_numbers_fast_16k.wav",
+    "prepare_command": "espeak-ng -s 340 -w long_text_numbers_fast.wav \"one two three four five six seven eight nine ten eleven twelve thirteen fourteen\" && ffmpeg -y -i long_text_numbers_fast.wav -ar 16000 -ac 1 long_text_numbers_fast_16k.wav",
+    "pytorch_text": "One two three four five six seven eight nine ten eleven twelve thirteen fourteen.",
+    "ncnn_text64": "One two three four five six seven eight nine ten eleven twelve thirteen",
+    "ncnn_text128": "One two three four five six seven eight nine ten eleven twelve thirteen fourteen.",
+    "match": true,
+    "note": "text_seq_len=64 truncates this sample; text_seq_len=128 matches PyTorch."
   }
 ]

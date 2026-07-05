@@ -52,7 +52,7 @@ C++ runtime 负责复现外围 pipeline。
 - 已加入正式 CMake 构建：`qwen3_asr_main`
 - 已验证模型：`Qwen/Qwen3-ASR-0.6B`
 - 当前导出：`fp32`
-- 当前静态 text 长度：`text_seq_len=64`
+- 当前已验证静态 text 长度：`text_seq_len=64` 和 `text_seq_len=128`
 - 当前每个音频 chunk：256-frame mel window
 - 已支持 16 kHz mono PCM16 WAV 输入
 
@@ -89,6 +89,7 @@ C++ log-mel 与 Hugging Face 路径对比：
 | `hello_world` | 1.36s | `Hello world.` | `Hello world.` | 是 |
 | `natural_zero` | 0.64s | `Zero.` | `Zero.` | 是 |
 | `digit_five` | 0.42s | `Five.` | `Five.` | 是 |
+| `long_text_numbers_fast` | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | 是，text128 |
 | `long_digit_five` | 16.97s | `By by` | `By by by by by by by by by by ...` | 否 |
 
 `long_digit_five` 是人工重复样本，不适合作为语义正确性的主要 benchmark。
@@ -98,7 +99,8 @@ C++ log-mel 与 Hugging Face 路径对比：
 
 - 长音频 chunking 仍是简单固定窗口。
 - 每个 chunk 独立 decode，再做简单文本拼接。
-- `text_seq_len=64` 限制 prompt + 生成文本长度。
+- `text_seq_len=64` 会限制 prompt + 生成文本长度；已验证重新导出
+  `text_seq_len=128` 可以解决当前长文本样例截断问题。
 - 还没有 KV cache。
 - 还没有 timestamps / forced aligner。
 - 还没有第二平台验证。
@@ -130,7 +132,39 @@ cmake --build /data/qwen3-asr-ncnn/build/ncnn_llm_cmake \
 text=This is a test of me recording my voice.
 ```
 
-## 9. 下一步
+## 9. 长文本验证
+
+为验证 `text_seq_len=64` 的限制，生成了一个 2.22 秒快速数字语音：
+
+```bash
+espeak-ng -s 340 -w long_text_numbers_fast.wav \
+  "one two three four five six seven eight nine ten eleven twelve thirteen fourteen"
+ffmpeg -y -i long_text_numbers_fast.wav \
+  -ar 16000 -ac 1 long_text_numbers_fast_16k.wav
+```
+
+PyTorch 输出：
+
+```text
+One two three four five six seven eight nine ten eleven twelve thirteen fourteen.
+```
+
+text64 ncnn 输出被静态长度截断：
+
+```text
+One two three four five six seven eight nine ten eleven twelve thirteen
+```
+
+重新导出并组装 `qwen3_asr_0_6b_runtime_text128` 后，ncnn 输出：
+
+```text
+One two three four five six seven eight nine ten eleven twelve thirteen fourteen.
+```
+
+结论：长文本截断不是 ncnn runtime 逻辑错误，而是 `text_backbone` 静态长度太小。
+通过 `--text-seq-len 128` 重新导出可以解决当前样例。
+
+## 10. 下一步
 
 1. 做第二平台 build/smoke test。
 2. 改进长音频 overlap chunk 和拼接。

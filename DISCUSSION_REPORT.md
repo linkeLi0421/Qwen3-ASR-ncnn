@@ -147,6 +147,7 @@ C++ log-mel 前处理也和 Hugging Face 路径做过对比：
 | `hello_world` | 1.36s | `Hello world.` | `Hello world.` | 是 |
 | `natural_zero` | 0.64s | `Zero.` | `Zero.` | 是 |
 | `digit_five` | 0.42s | `Five.` | `Five.` | 是 |
+| `long_text_numbers_fast` | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | 是，text128 |
 | `long_digit_five` | 16.97s | `By by` | `By by by by by by by by by by ...` | 否 |
 
 `long_digit_five` 是把同一个很短的 spoken digit 样本重复 40 次得到的人工压力
@@ -164,11 +165,13 @@ C++ log-mel 前处理也和 Hugging Face 路径做过对比：
   可以完整匹配 PyTorch。
 - 增加了 chunk 文本拼接清理，避免中间 chunk 的句号导致结果变成
   `This is a test. Of me ...`。
+- 通过重新导出 `text_seq_len=128` 解决了当前长文本样例在 text64 下被截断的问题。
 
 ## 9. 当前限制
 
 - 每个音频 chunk 仍然是固定 256-frame mel window。
-- `text_backbone` 当前导出为 `text_seq_len=64`。
+- `text_backbone` 已验证 `text_seq_len=64` 和 `text_seq_len=128`；更长输出需要
+  根据目标场景继续增大静态长度或实现更完整的 cache/分段策略。
 - 长音频只是简单切块和文本拼接，还不等价于官方 Python pipeline。
 - 当前 decoding 是 greedy decode。
 - KV cache 尚未实现。

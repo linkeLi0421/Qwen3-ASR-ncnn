@@ -56,6 +56,7 @@ ffmpeg -y -i input.wav -ar 16000 -ac 1 output_16k.wav
 | `hello_world` | 合成短语音 | 1.36s | `Hello world.` | `Hello world.` | 通过 |
 | `natural_zero` | 真实短 digit | 0.64s | `Zero.` | `Zero.` | 通过 |
 | `digit_five` | 真实短 digit | 0.42s | `Five.` | `Five.` | 通过 |
+| `long_text_numbers_fast` | 合成长文本压力样例 | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | text128 通过 |
 | `long_digit_five` | 人工重复压力样例 | 16.97s | `By by` | `By by by by by by by by by by ...` | 不作为语义正确性 benchmark |
 
 ## 样例来源和生成方式
@@ -172,3 +173,36 @@ ncnn:    By by by by by by by by by by ...
 ```
 
 结论：这是长音频切块拼接问题，不是核心 ncnn 模块转换失败。
+
+### `long_text_numbers_fast`
+
+来源：本地用 `espeak-ng` 合成，用于验证 `text_seq_len` 是否限制生成文本长度。
+
+生成：
+
+```bash
+espeak-ng -s 340 -w long_text_numbers_fast.wav \
+  "one two three four five six seven eight nine ten eleven twelve thirteen fourteen"
+ffmpeg -y -i long_text_numbers_fast.wav \
+  -ar 16000 -ac 1 long_text_numbers_fast_16k.wav
+```
+
+PyTorch 结果：
+
+```text
+One two three four five six seven eight nine ten eleven twelve thirteen fourteen.
+```
+
+text64 ncnn 结果：
+
+```text
+One two three four five six seven eight nine ten eleven twelve thirteen
+```
+
+text128 ncnn 结果：
+
+```text
+One two three four five six seven eight nine ten eleven twelve thirteen fourteen.
+```
+
+结论：`text_seq_len=64` 会截断这个样例；重新导出 `text_seq_len=128` 后通过。
