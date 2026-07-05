@@ -141,14 +141,15 @@ C++ log-mel 前处理也和 Hugging Face 路径做过对比：
 - PyTorch：官方 `Qwen3ASRModel.transcribe(..., language="English")`
 - ncnn：当前 C++ runtime
 
-| 样本 | 时长 | PyTorch | ncnn | 是否一致 |
-| --- | ---: | --- | --- | --- |
-| `pdx_voice` | 4.95s | `This is a test of me recording my voice.` | `This is a test of me recording my voice.` | 是 |
-| `hello_world` | 1.36s | `Hello world.` | `Hello world.` | 是 |
-| `natural_zero` | 0.64s | `Zero.` | `Zero.` | 是 |
-| `digit_five` | 0.42s | `Five.` | `Five.` | 是 |
-| `long_text_numbers_fast` | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | 是，text128 |
-| `long_digit_five` | 16.97s | `By by` | `By by by by by by by by by by ...` | 否 |
+| 样本 | runtime | 时长 | PyTorch | ncnn | 结论 |
+| --- | --- | ---: | --- | --- | --- |
+| `pdx_voice` | text128 + CMake | 4.95s | `This is a test of me recording my voice.` | `This is a test of me recording my voice.` | 通过 |
+| `hello_world` | text64 | 1.36s | `Hello world.` | `Hello world.` | 通过 |
+| `natural_zero` | text64 | 0.64s | `Zero.` | `Zero.` | 通过 |
+| `digit_five` | text64 | 0.42s | `Five.` | `Five.` | 通过 |
+| `long_text_numbers_fast` | text64 | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen` | 截断 |
+| `long_text_numbers_fast` | text128 | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | 通过 |
+| `long_digit_five` | text128 chunking | 16.97s | `By by` | `By by by by by by by by by by ...` | 长音频拼接限制 |
 
 `long_digit_five` 是把同一个很短的 spoken digit 样本重复 40 次得到的人工压力
 样本，不适合作为语义正确性的主要 benchmark。官方 PyTorch 也没有把它识别成

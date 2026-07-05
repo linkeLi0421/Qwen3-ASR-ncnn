@@ -19,15 +19,16 @@ ff196e1 Add CMake build for Qwen3-ASR runner
 TorchScript + pnnx 转成 ncnn，并且 C++ ncnn runtime 可以在多个短音频样本上
 和官方 PyTorch `Qwen3ASRModel.transcribe()` 输出一致。
 
-已匹配的样本包括：
+主要实验结果：
 
-| 样本 | 时长 | PyTorch | ncnn | 是否一致 |
-| --- | ---: | --- | --- | --- |
-| `pdx_voice` | 4.95s | `This is a test of me recording my voice.` | `This is a test of me recording my voice.` | 是 |
-| `hello_world` | 1.36s | `Hello world.` | `Hello world.` | 是 |
-| `natural_zero` | 0.64s | `Zero.` | `Zero.` | 是 |
-| `digit_five` | 0.42s | `Five.` | `Five.` | 是 |
-| `long_text_numbers_fast` | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | 是，使用 text128 |
+| 样本 | runtime | 时长 | PyTorch | ncnn | 结论 |
+| --- | --- | ---: | --- | --- | --- |
+| `pdx_voice` | text128 + CMake | 4.95s | `This is a test of me recording my voice.` | `This is a test of me recording my voice.` | 通过 |
+| `hello_world` | text64 | 1.36s | `Hello world.` | `Hello world.` | 通过 |
+| `natural_zero` | text64 | 0.64s | `Zero.` | `Zero.` | 通过 |
+| `digit_five` | text64 | 0.42s | `Five.` | `Five.` | 通过 |
+| `long_text_numbers_fast` | text64 | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen` | 截断 |
+| `long_text_numbers_fast` | text128 | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | 通过 |
 
 仍未完全解决的是长音频处理。当前长音频只是简单按固定窗口切块后拼接文本，
 还不等价于官方 Python pipeline。

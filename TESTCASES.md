@@ -50,14 +50,15 @@ ffmpeg -y -i input.wav -ar 16000 -ac 1 output_16k.wav
 
 ## 当前样例表
 
-| 样例 | 类型 | 时长 | PyTorch | ncnn | 结论 |
-| --- | --- | ---: | --- | --- | --- |
-| `pdx_voice` | 真实短语音 | 4.95s | `This is a test of me recording my voice.` | `This is a test of me recording my voice.` | 通过 |
-| `hello_world` | 合成短语音 | 1.36s | `Hello world.` | `Hello world.` | 通过 |
-| `natural_zero` | 真实短 digit | 0.64s | `Zero.` | `Zero.` | 通过 |
-| `digit_five` | 真实短 digit | 0.42s | `Five.` | `Five.` | 通过 |
-| `long_text_numbers_fast` | 合成长文本压力样例 | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | text128 通过 |
-| `long_digit_five` | 人工重复压力样例 | 16.97s | `By by` | `By by by by by by by by by by ...` | 不作为语义正确性 benchmark |
+| 样例 | 类型 | runtime | 时长 | PyTorch | ncnn | 结论 |
+| --- | --- | --- | ---: | --- | --- | --- |
+| `pdx_voice` | 真实短语音 | text128 + CMake | 4.95s | `This is a test of me recording my voice.` | `This is a test of me recording my voice.` | 通过 |
+| `hello_world` | 合成短语音 | text64 | 1.36s | `Hello world.` | `Hello world.` | 通过 |
+| `natural_zero` | 真实短 digit | text64 | 0.64s | `Zero.` | `Zero.` | 通过 |
+| `digit_five` | 真实短 digit | text64 | 0.42s | `Five.` | `Five.` | 通过 |
+| `long_text_numbers_fast` | 合成长文本压力样例 | text64 | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen` | 截断 |
+| `long_text_numbers_fast` | 合成长文本压力样例 | text128 | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | 通过 |
+| `long_digit_five` | 人工重复压力样例 | text128 chunking | 16.97s | `By by` | `By by by by by by by by by by ...` | 不作为语义正确性 benchmark |
 
 ## 样例来源和生成方式
 

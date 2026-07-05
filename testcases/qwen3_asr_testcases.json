@@ -9,7 +9,8 @@
     "pytorch_text": "This is a test of me recording my voice.",
     "ncnn_text": "This is a test of me recording my voice.",
     "match": true,
-    "note": "Best current end-to-end real voice validation sample."
+    "note": "Best current end-to-end real voice validation sample.",
+    "runtime": "text128 + CMake"
   },
   {
     "name": "hello_world",
@@ -21,7 +22,8 @@
     "pytorch_text": "Hello world.",
     "ncnn_text": "Hello world.",
     "match": true,
-    "note": "Synthetic smoke test."
+    "note": "Synthetic smoke test.",
+    "runtime": "text64"
   },
   {
     "name": "natural_zero",
@@ -33,7 +35,8 @@
     "pytorch_text": "Zero.",
     "ncnn_text": "Zero.",
     "match": true,
-    "note": "Natural spoken digit validation sample."
+    "note": "Natural spoken digit validation sample.",
+    "runtime": "text64"
   },
   {
     "name": "digit_five",
@@ -45,7 +48,8 @@
     "pytorch_text": "Five.",
     "ncnn_text": "Five.",
     "match": true,
-    "note": "Natural spoken digit validation sample."
+    "note": "Natural spoken digit validation sample.",
+    "runtime": "text64"
   },
   {
     "name": "long_digit_five",
@@ -57,7 +61,8 @@
     "pytorch_text": "By by",
     "ncnn_text": "By by by by by by by by by by ...",
     "match": false,
-    "note": "Artificial stress sample. Not a semantic correctness benchmark; tracks long-audio chunk stitching limitation."
+    "note": "Artificial stress sample. Not a semantic correctness benchmark; tracks long-audio chunk stitching limitation.",
+    "runtime": "text128 chunking"
   },
   {
     "name": "long_text_numbers_fast",
@@ -70,6 +75,7 @@
     "ncnn_text64": "One two three four five six seven eight nine ten eleven twelve thirteen",
     "ncnn_text128": "One two three four five six seven eight nine ten eleven twelve thirteen fourteen.",
     "match": true,
-    "note": "text_seq_len=64 truncates this sample; text_seq_len=128 matches PyTorch."
+    "note": "text_seq_len=64 truncates this sample; text_seq_len=128 matches PyTorch.",
+    "runtime": "text64 fails, text128 passes"
   }
 ]
