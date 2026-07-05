@@ -55,6 +55,7 @@ C++ runtime 负责：
 - 模型：`Qwen/Qwen3-ASR-0.6B`
 - 导出精度：`fp32`
 - 当前 runtime 验证：ncnn C++ CPU 路径
+- CMake：已在 Linux/RTX 4090 VM 上正式构建 `qwen3_asr_main`
 
 `bf16` TorchScript 可以用于观察，但 pnnx/ncnn runtime 验证目前使用 `fp32`
 更稳定。
@@ -81,12 +82,12 @@ runtime 模型目录：
 /data/qwen3-asr-ncnn/models/qwen3_asr_0_6b_runtime_text64
 ```
 
-## 5. ncnn runtime 命令
+## 5. ncnn runtime 和 CMake 命令
 
 示例：
 
 ```bash
-/data/qwen3-asr-ncnn/build/qwen3_asr_main_cmake/build/qwen3_asr_main \
+/data/qwen3-asr-ncnn/build/ncnn_llm_cmake/qwen3_asr_main \
   --model /data/qwen3-asr-ncnn/models/qwen3_asr_0_6b_runtime_text64 \
   --audio-wav /data/qwen3-asr-ncnn/models/pdx_voice_16k.wav \
   --generate-from-features \
@@ -95,6 +96,24 @@ runtime 模型目录：
 ```
 
 当前 CLI 输入要求：16 kHz、mono、PCM16 WAV。
+
+CMake 构建命令：
+
+```bash
+cmake -S /data/qwen3-asr-ncnn/src/ncnn_llm \
+  -B /data/qwen3-asr-ncnn/build/ncnn_llm_cmake \
+  -Dncnn_DIR=/data/qwen3-asr-ncnn/build/ncnn/install/lib/cmake/ncnn \
+  -DNCNN_LLM_NLOHMANN_JSON_INCLUDE_DIR=/usr/local/lib/python3.12/dist-packages/include/cudnn_frontend/thirdparty
+
+cmake --build /data/qwen3-asr-ncnn/build/ncnn_llm_cmake \
+  --target qwen3_asr_main -j
+```
+
+正式 CMake build 出来的 binary 已验证 `pdx_voice_16k.wav`：
+
+```text
+text=This is a test of me recording my voice.
+```
 
 ## 6. 模块级验证
 

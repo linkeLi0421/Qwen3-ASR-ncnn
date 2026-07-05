@@ -7,7 +7,7 @@ https://github.com/linkeLi0421/ncnn_llm/tree/qwen3-asr-export
 当前实现提交：
 
 ```text
-4eeda9f Improve Qwen3-ASR runtime decoding
+ff196e1 Add CMake build for Qwen3-ASR runner
 ```
 
 ## 1. 转换目标
@@ -49,6 +49,7 @@ C++ runtime 负责复现外围 pipeline。
 
 - 已实现 exporter：`export/qwen3_asr_export.py`
 - 已实现 C++ runtime：`qwen3_asr_main`
+- 已加入正式 CMake 构建：`qwen3_asr_main`
 - 已验证模型：`Qwen/Qwen3-ASR-0.6B`
 - 当前导出：`fp32`
 - 当前静态 text 长度：`text_seq_len=64`
@@ -102,7 +103,34 @@ C++ log-mel 与 Hugging Face 路径对比：
 - 还没有 timestamps / forced aligner。
 - 还没有第二平台验证。
 
-## 8. 下一步
+## 8. CMake 验证
+
+正式 CMake 已在 Linux/RTX 4090 VM 上通过：
+
+```bash
+cmake -S /data/qwen3-asr-ncnn/src/ncnn_llm \
+  -B /data/qwen3-asr-ncnn/build/ncnn_llm_cmake \
+  -Dncnn_DIR=/data/qwen3-asr-ncnn/build/ncnn/install/lib/cmake/ncnn \
+  -DNCNN_LLM_NLOHMANN_JSON_INCLUDE_DIR=/usr/local/lib/python3.12/dist-packages/include/cudnn_frontend/thirdparty
+
+cmake --build /data/qwen3-asr-ncnn/build/ncnn_llm_cmake \
+  --target qwen3_asr_main -j
+```
+
+构建结果：
+
+```text
+[100%] Built target qwen3_asr_main
+```
+
+使用正式 CMake binary 验证 `pdx-cs-sound/wavs/voice.wav` 转换后的
+`pdx_voice_16k.wav`：
+
+```text
+text=This is a test of me recording my voice.
+```
+
+## 9. 下一步
 
 1. 做第二平台 build/smoke test。
 2. 改进长音频 overlap chunk 和拼接。

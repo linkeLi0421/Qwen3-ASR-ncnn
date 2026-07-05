@@ -28,7 +28,7 @@ print(result)
 ncnn 使用：
 
 ```bash
-/data/qwen3-asr-ncnn/build/qwen3_asr_main_cmake/build/qwen3_asr_main \
+/data/qwen3-asr-ncnn/build/ncnn_llm_cmake/qwen3_asr_main \
   --model /data/qwen3-asr-ncnn/models/qwen3_asr_0_6b_runtime_text64 \
   --audio-wav "$wav" \
   --generate-from-features \
