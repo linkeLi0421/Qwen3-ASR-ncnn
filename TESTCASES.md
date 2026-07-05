@@ -29,10 +29,11 @@ ncnn 使用：
 
 ```bash
 /data/qwen3-asr-ncnn/build/ncnn_llm_cmake/qwen3_asr_main \
-  --model /data/qwen3-asr-ncnn/models/qwen3_asr_0_6b_runtime_text64 \
+  --model /data/qwen3-asr-ncnn/models/qwen3_asr_0_6b_runtime_text128 \
   --audio-wav "$wav" \
   --generate-from-features \
   --language English \
+  --chunk-overlap-frames 32 \
   --max-new-tokens 64
 ```
 
@@ -58,7 +59,7 @@ ffmpeg -y -i input.wav -ar 16000 -ac 1 output_16k.wav
 | `digit_five` | 真实短 digit | text64 | 0.42s | `Five.` | `Five.` | 通过 |
 | `long_text_numbers_fast` | 合成长文本压力样例 | text64 | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen` | 截断 |
 | `long_text_numbers_fast` | 合成长文本压力样例 | text128 | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | 通过 |
-| `long_digit_five` | 人工重复压力样例 | text128 chunking | 16.97s | `By by` | `By by by by by by by by by by ...` | 不作为语义正确性 benchmark |
+| `long_digit_five` | 人工重复压力样例 | text128 overlap chunking | 16.97s | `By by` | `By by by by by by five, five, five.` | 不作为语义正确性 benchmark |
 
 ## 样例来源和生成方式
 
@@ -170,7 +171,7 @@ ffmpeg -y -f concat -safe 0 \
 
 ```text
 PyTorch: By by
-ncnn:    By by by by by by by by by by ...
+ncnn:    By by by by by by five, five, five.
 ```
 
 结论：这是长音频切块拼接问题，不是核心 ncnn 模块转换失败。

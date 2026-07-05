@@ -7,7 +7,7 @@ https://github.com/linkeLi0421/ncnn_llm/tree/qwen3-asr-export
 当前实现提交：
 
 ```text
-ff196e1 Add CMake build for Qwen3-ASR runner
+5f1fab1 Add overlap stitching for Qwen3-ASR chunks
 ```
 
 ## 1. 转换目标
@@ -91,15 +91,17 @@ C++ log-mel 与 Hugging Face 路径对比：
 | `digit_five` | text64 | 0.42s | `Five.` | `Five.` | 通过 |
 | `long_text_numbers_fast` | text64 | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen` | 截断 |
 | `long_text_numbers_fast` | text128 | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | 通过 |
-| `long_digit_five` | text128 chunking | 16.97s | `By by` | `By by by by by by by by by by ...` | 长音频拼接限制 |
+| `long_digit_five` | text128 overlap chunking | 16.97s | `By by` | `By by by by by by five, five, five.` | 长音频拼接限制 |
 
 `long_digit_five` 是人工重复样本，不适合作为语义正确性的主要 benchmark。
 它的失败应记录为长音频 chunk stitching 限制，不应视为核心 ncnn 转换失败。
+加入 32-frame overlap 和词级去重后，输出从早期的长重复/混合片段改善为
+`By by by by by by five, five, five.`，但仍不应作为语义正确性通过样本。
 
 ## 7. 当前限制
 
-- 长音频 chunking 仍是简单固定窗口。
-- 每个 chunk 独立 decode，再做简单文本拼接。
+- 长音频 chunking 已加入 32-frame overlap 和词级去重拼接，但仍然不是官方 Python pipeline 的完整复刻。
+- 每个 chunk 仍然独立 decode，再做文本拼接。
 - `text_seq_len=64` 会限制 prompt + 生成文本长度；已验证重新导出
   `text_seq_len=128` 可以解决当前长文本样例截断问题。
 - 还没有 KV cache。
@@ -165,10 +167,27 @@ One two three four five six seven eight nine ten eleven twelve thirteen fourteen
 结论：长文本截断不是 ncnn runtime 逻辑错误，而是 `text_backbone` 静态长度太小。
 通过 `--text-seq-len 128` 重新导出可以解决当前样例。
 
-## 10. 下一步
+## 10. 长音频 overlap/stitching 验证
+
+runtime 已加入带 overlap 的固定窗口 chunking：
+
+```bash
+--chunk-overlap-frames 32
+```
+
+拼接时会对相邻 chunk 的文本做词级 suffix/prefix 去重。回归结果：
+
+| 样本 | 结果 |
+| --- | --- |
+| `pdx_voice_16k.wav` | 仍输出 `This is a test of me recording my voice.` |
+| `long_text_numbers_fast_16k.wav` | 仍输出完整数字序列 |
+| `long_digit_5_x40_16k.wav` | 输出 `By by by by by by five, five, five.`，仍记录为人工重复压力样例失败 |
+
+## 11. 下一步
 
 1. 做第二平台 build/smoke test。
-2. 改进长音频 overlap chunk 和拼接。
+2. 继续改进长音频 overlap/stitching，例如加入更稳的 overlap 长度选择、
+   置信度/时间戳辅助和跨 chunk 上下文。
 3. 增加 KV cache。
 4. 做更大静态 shape 或更灵活的导出策略。
 5. 整理 PR 说明和 Discussion 回复。

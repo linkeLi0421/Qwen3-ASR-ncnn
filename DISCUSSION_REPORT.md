@@ -149,13 +149,18 @@ C++ log-mel 前处理也和 Hugging Face 路径做过对比：
 | `digit_five` | text64 | 0.42s | `Five.` | `Five.` | 通过 |
 | `long_text_numbers_fast` | text64 | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen` | 截断 |
 | `long_text_numbers_fast` | text128 | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | 通过 |
-| `long_digit_five` | text128 chunking | 16.97s | `By by` | `By by by by by by by by by by ...` | 长音频拼接限制 |
+| `long_digit_five` | text128 overlap chunking | 16.97s | `By by` | `By by by by by by five, five, five.` | 长音频拼接限制 |
 
 `long_digit_five` 是把同一个很短的 spoken digit 样本重复 40 次得到的人工压力
 样本，不适合作为语义正确性的主要 benchmark。官方 PyTorch 也没有把它识别成
-重复的 `Five.`，而是输出 `By by`。ncnn 当前是固定窗口分块后逐块解码并简单
-拼接，所以重复音频会自然产生重复文本。这个问题应记录为长音频 chunk stitching
-限制，而不是 ncnn 模块转换失败。
+重复的 `Five.`，而是输出 `By by`。ncnn 当前按带 overlap 的固定窗口逐块解码，
+再做词级去重拼接，所以重复音频仍可能产生重复文本。这个问题应记录为长音频
+chunk stitching 限制，而不是 ncnn 模块转换失败。
+
+当前长音频 runtime 已加入 32-frame overlap 和词级 suffix/prefix 去重。该改动
+保持 `pdx_voice` 和 `long_text_numbers_fast` 回归通过，并把 `long_digit_five`
+的输出改善为 `By by by by by by five, five, five.`。由于这个样本本身是人工重复
+压力样例，仍不把它视为语义正确性通过。
 
 ## 8. 已修复的问题
 
@@ -167,13 +172,15 @@ C++ log-mel 前处理也和 Hugging Face 路径做过对比：
 - 增加了 chunk 文本拼接清理，避免中间 chunk 的句号导致结果变成
   `This is a test. Of me ...`。
 - 通过重新导出 `text_seq_len=128` 解决了当前长文本样例在 text64 下被截断的问题。
+- 增加了带 overlap 的固定窗口 chunking，默认 `--chunk-overlap-frames 32`，并在
+  拼接时做词级 suffix/prefix 去重。
 
 ## 9. 当前限制
 
 - 每个音频 chunk 仍然是固定 256-frame mel window。
 - `text_backbone` 已验证 `text_seq_len=64` 和 `text_seq_len=128`；更长输出需要
   根据目标场景继续增大静态长度或实现更完整的 cache/分段策略。
-- 长音频只是简单切块和文本拼接，还不等价于官方 Python pipeline。
+- 长音频已经加入 overlap chunking 和词级去重拼接，但还不等价于官方 Python pipeline。
 - 当前 decoding 是 greedy decode。
 - KV cache 尚未实现。
 - timestamp / forced aligner 尚未实现。

@@ -59,10 +59,10 @@
     "prepared_wav": "long_digit_5_x40_16k.wav",
     "prepare_command": "for i in $(seq 1 40); do printf \"file '%s'\\n\" \"random_digit_5_jackson_0_16k.wav\" >> long_digit_5_x40_concat.txt; done && ffmpeg -y -f concat -safe 0 -i long_digit_5_x40_concat.txt -c copy long_digit_5_x40_16k.wav",
     "pytorch_text": "By by",
-    "ncnn_text": "By by by by by by by by by by ...",
+    "ncnn_text": "By by by by by by five, five, five.",
     "match": false,
-    "note": "Artificial stress sample. Not a semantic correctness benchmark; tracks long-audio chunk stitching limitation.",
-    "runtime": "text128 chunking"
+    "note": "Artificial stress sample. Not a semantic correctness benchmark; tracks remaining long-audio chunk stitching limitation after overlap.",
+    "runtime": "text128 overlap chunking"
   },
   {
     "name": "long_text_numbers_fast",
