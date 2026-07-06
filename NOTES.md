@@ -112,7 +112,7 @@ C++ log-mel 与 Hugging Face 路径对比：
   压力样例上与对应静态路径对齐。KV48 已验证；KV64 重新导出在当前 VM 上卡在
   模型加载/初始化阶段，需要后续单独排查。
 - 还没有 timestamps / forced aligner。
-- 还没有第二平台验证。
+- 已完成第二平台 macOS arm64 CPU-only smoke test。
 
 ## 8. CMake 验证
 
@@ -136,6 +136,61 @@ cmake --build /data/qwen3-asr-ncnn/build/ncnn_llm_cmake \
 
 使用正式 CMake binary 验证 `pdx-cs-sound/wavs/voice.wav` 转换后的
 `pdx_voice_16k.wav`：
+
+```text
+text=This is a test of me recording my voice.
+```
+
+第二平台 macOS arm64 CPU-only 也已通过：
+
+| 项目 | 值 |
+| --- | --- |
+| 系统 | macOS 15.7.4 |
+| 芯片 | Apple M1 Pro |
+| 架构 | arm64 |
+| ncnn | 本机源码 CPU-only build，`NCNN_VULKAN=OFF` |
+| ncnn_llm | 本机 CMake build |
+| binary | `/Users/link/llk/build/ncnn_llm-macos-qwen3-asr/qwen3_asr_main` |
+| 模型 | `/Users/link/llk/models/qwen3_asr_0_6b_runtime_text128` |
+| 音频 | `/Users/link/llk/test_audio/pdx_voice_16k.wav` |
+
+本机 build 命令：
+
+```bash
+cmake -S /Users/link/llk/ncnn \
+  -B /Users/link/llk/build/ncnn-macos-cpu \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/Users/link/llk/build/ncnn-macos-install \
+  -DNCNN_VULKAN=OFF \
+  -DNCNN_BUILD_TOOLS=OFF \
+  -DNCNN_BUILD_EXAMPLES=OFF \
+  -DNCNN_BUILD_TESTS=OFF \
+  -DNCNN_BUILD_BENCHMARK=OFF \
+  -DNCNN_SHARED_LIB=OFF
+
+cmake --build /Users/link/llk/build/ncnn-macos-cpu -j$(sysctl -n hw.ncpu)
+cmake --install /Users/link/llk/build/ncnn-macos-cpu
+
+cmake -S /Users/link/llk/ncnn_llm \
+  -B /Users/link/llk/build/ncnn_llm-macos-qwen3-asr \
+  -DCMAKE_BUILD_TYPE=Release \
+  -Dncnn_DIR=/Users/link/llk/build/ncnn-macos-install/lib/cmake/ncnn \
+  -DNCNN_LLM_NLOHMANN_JSON_INCLUDE_DIR=/opt/homebrew/include
+
+cmake --build /Users/link/llk/build/ncnn_llm-macos-qwen3-asr \
+  --target qwen3_asr_main -j$(sysctl -n hw.ncpu)
+```
+
+本机 smoke test 命令：
+
+```bash
+/Users/link/llk/build/ncnn_llm-macos-qwen3-asr/qwen3_asr_main \
+  --model /Users/link/llk/models/qwen3_asr_0_6b_runtime_text128 \
+  --audio-wav /Users/link/llk/test_audio/pdx_voice_16k.wav \
+  --generate-from-features --max-new-tokens 32 --threads 6
+```
+
+输出：
 
 ```text
 text=This is a test of me recording my voice.
@@ -217,12 +272,11 @@ runtime 已加入带 overlap 的固定窗口 chunking：
 
 ## 11. 下一步
 
-1. 做第二平台 build/smoke test。
-2. 排查 KV64 重新导出在当前 VM 上卡在模型加载/初始化阶段的问题。
-3. 继续改进长音频 overlap/stitching，例如加入更稳的 overlap 长度选择、
+1. 排查 KV64 重新导出在当前 VM 上卡在模型加载/初始化阶段的问题。
+2. 继续改进长音频 overlap/stitching，例如加入更稳的 overlap 长度选择、
    置信度/时间戳辅助和跨 chunk 上下文。
-4. 做更大静态 shape 或更灵活的导出策略。
-5. 整理 PR 说明和 Discussion 回复。
+3. 做更大静态 shape 或更灵活的导出策略。
+4. 整理 PR 说明和 Discussion 回复。
 
 ## 12. KV cache 实验记录
 
@@ -289,4 +343,4 @@ prefill 得到每层 K/V cache，再逐 token decode。
   这不是 ncnn runtime 失败，需要后续单独排查导出环境/processor 加载。
 
 结论：KV cache 路径在短样例和当前长输出样例上已经和默认静态路径对齐。它仍应
-标记为实验性，因为还没有第二平台验证，也还没有完成 KV64/KV128 导出矩阵。
+标记为实验性，因为还没有完成 KV64/KV128 导出矩阵，也还需要更多平台/样例覆盖。

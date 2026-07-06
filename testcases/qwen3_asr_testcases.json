@@ -13,6 +13,21 @@
     "runtime": "text128 + CMake"
   },
   {
+    "name": "pdx_voice_macos_cpu",
+    "type": "second_platform_smoke",
+    "duration_seconds": 4.95,
+    "platform": "macOS 15.7.4 / Apple M1 Pro / arm64 / CPU-only",
+    "source": "https://github.com/pdx-cs-sound/wavs/blob/main/voice.wav",
+    "prepared_wav": "pdx_voice_16k.wav",
+    "model": "qwen3_asr_0_6b_runtime_text128",
+    "command": "/Users/link/llk/build/ncnn_llm-macos-qwen3-asr/qwen3_asr_main --model /Users/link/llk/models/qwen3_asr_0_6b_runtime_text128 --audio-wav /Users/link/llk/test_audio/pdx_voice_16k.wav --generate-from-features --max-new-tokens 32 --threads 6",
+    "expected_text": "This is a test of me recording my voice.",
+    "ncnn_text": "This is a test of me recording my voice.",
+    "match": true,
+    "note": "Second platform build/smoke test using local macOS arm64 CPU-only ncnn build.",
+    "runtime": "macOS arm64 CPU-only text128"
+  },
+  {
     "name": "pdx_voice_kv_cache",
     "type": "real_short_speech_kv_smoke",
     "duration_seconds": 4.95,

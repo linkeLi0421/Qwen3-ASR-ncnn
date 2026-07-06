@@ -64,6 +64,7 @@ ffmpeg -y -i input.wav -ar 16000 -ac 1 output_16k.wav
 | `long_text_numbers_fast_kv` | KV 长输出 | text48 + KV cache | 2.22s | text128 static | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | 通过 |
 | `long_text_numbers_30` | 合成长输出/拼接压力样例 | text64/text128/KV48 | 7.00s | 合成 one 到 thirty | text128 与 KV48 一致；text64 截断 | 部分通过 |
 | `long_digit_five` | 人工重复压力样例 | text128 overlap chunking | 16.97s | `By by` | `By by by by by by five, five, five.` | 不作为语义正确性 benchmark |
+| `pdx_voice_macos_cpu` | 第二平台 smoke test | macOS arm64 CPU-only text128 | 4.95s | `This is a test of me recording my voice.` | `This is a test of me recording my voice.` | 通过 |
 
 ## KV cache 批量对比
 
@@ -115,6 +116,29 @@ python3 export/qwen3_asr_export.py \
 KV64 模型包；这需要后续单独排查导出环境。
 
 ## 样例来源和生成方式
+
+## 第二平台 smoke test
+
+平台：
+
+```text
+macOS 15.7.4 / Apple M1 Pro / arm64 / CPU-only
+```
+
+命令：
+
+```bash
+/Users/link/llk/build/ncnn_llm-macos-qwen3-asr/qwen3_asr_main \
+  --model /Users/link/llk/models/qwen3_asr_0_6b_runtime_text128 \
+  --audio-wav /Users/link/llk/test_audio/pdx_voice_16k.wav \
+  --generate-from-features --max-new-tokens 32 --threads 6
+```
+
+输出：
+
+```text
+text=This is a test of me recording my voice.
+```
 
 ### `pdx_voice`
 
