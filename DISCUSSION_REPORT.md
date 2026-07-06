@@ -268,9 +268,9 @@ text=This is a test of me recording my voice.
 
 ## 13. KV cache timing
 
-为了确认 KV cache 是否带来实际性能收益，给 `qwen3_asr_main` 加了粗粒度 timing
-输出，并在 Linux VM 上对比 static text128 与 KV48。这里使用 CPU ncnn runtime
-和 `--threads 8`，没有启用 Vulkan。
+为了确认 KV cache 是否带来实际性能收益，给 `qwen3_asr_main` 加了 `--timing`
+选项，并在 Linux VM 上对比 static text128 与 KV48。这里使用 CPU ncnn runtime
+和 `--threads 8 --timing`，没有启用 Vulkan。
 
 | 样本 | 模式 | chunk | tokens | audio ms | decode ms | total measured ms | 结论 |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |

@@ -142,7 +142,7 @@ text=This is a test of me recording my voice.
 
 ## KV cache timing
 
-环境：Linux VM，`--threads 8`，CPU ncnn runtime，未启用 Vulkan。
+环境：Linux VM，`--threads 8 --timing`，CPU ncnn runtime，未启用 Vulkan。
 
 | 样本 | 模式 | chunks | tokens | decode ms | total measured ms | speedup |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |

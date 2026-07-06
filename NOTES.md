@@ -350,7 +350,8 @@ prefill 得到每层 K/V cache，再逐 token decode。
 ## 13. KV cache timing
 
 为判断 KV cache 是否只有结构意义，还是已经带来实际性能收益，给
-`qwen3_asr_main` 增加了粗粒度 timing 输出：
+`qwen3_asr_main` 增加了 `--timing` 选项。默认运行不打印 timing；显式传
+`--timing` 时会输出：
 
 - `audio_encoder_time_ms`
 - `prefill_time_ms`
@@ -367,6 +368,18 @@ prefill 得到每层 K/V cache，再逐 token decode。
 | threads | 8 |
 | static model | `qwen3_asr_0_6b_runtime_text128` |
 | KV model | `qwen3_asr_0_6b_runtime_kv48` |
+
+命令形式：
+
+```bash
+qwen3_asr_main \
+  --model <model-dir> \
+  --audio-wav <wav> \
+  --generate-from-features \
+  --max-new-tokens <N> \
+  --threads 8 \
+  --timing
+```
 
 结果：
 
