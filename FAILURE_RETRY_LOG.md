@@ -148,3 +148,88 @@ shared physical CPU count 为 0 有关。
 
 处理：VM 上本地 patch 了 ncnn 源码以继续验证。这个 patch 还没有并入
 `ncnn_llm`，需要后续单独处理或向 ncnn 上游反馈。
+
+## 11. KV cache decode 第二步后漂移
+
+目标是为 Qwen3-ASR text decoder 加 KV cache，减少每个 token 重跑完整 prompt
+的开销。
+
+失败过程：
+
+1. 直接 trace Transformers `use_cache=True` 路径时，cache/mask 逻辑不适合直接
+   pnnx 转换。
+2. 改为手写每层 attention 的 prefill/decode wrapper 后，TorchScript 和 pnnx
+   可以转换。
+3. 初版 ncnn KV decode 第一两个 token 接近默认路径，但多步生成后开始漂移。
+4. 排查发现 pnnx 在 one-token decode 图中把 cache concat 后的 reshape 写死为
+   `cache_len + 1`，例如 `1=49`。第一步 48+1 正确，第二步实际需要 50，但图仍按
+   49 reshape。
+5. 尝试在 C++ 中裁剪 cache 回固定 48 长度，虽然形状稳定，但会丢掉 prompt/audio
+   context，输出更差。
+6. 尝试用 pnnx `inputshape2` 推出动态 cache 维度，能生成 `?` 维度，但 ncnn param
+   中出现 `pnnx.Expression`，当前 runtime 无法加载。
+
+最终修复：
+
+在 exporter 的 pnnx 后处理阶段，只把 `text_decode_kv.ncnn.param` 中 repeated-KV
+相关的 reshape 从：
+
+```text
+0=128 1=49 2=16
+```
+
+改为：
+
+```text
+0=128 1=-1 2=16
+```
+
+ncnn 可以加载这个图，并能在后续 decode 步中按实际 cache 长度推断维度。
+
+验证结果：`pdx_voice_16k.wav`、`pdx_voice-note_16k.wav`、`0_jackson_0_16k.wav`、
+`1_jackson_0_16k.wav`、`natural_digit_0_16k.wav` 和
+`random_digit_5_jackson_0_16k.wav` 共 6 条短样例上，默认静态 decode 与
+KV cache decode 输出一致。
+
+当前判断：KV cache 路径已经在短样例上跑通，但仍是实验性实现，需要更多样本、
+更长文本、不同导出长度和第二平台验证。
+
+## 12. 数字样本采样率不匹配
+
+补跑 `0_jackson_0.wav` 和 `1_jackson_0.wav` 时，runtime 返回：
+
+```text
+Only 16 kHz WAV is supported for now, got 8000
+```
+
+原因：free-spoken-digit-dataset 的原始 wav 是 8 kHz。处理方式是先转成 16 kHz
+单声道：
+
+```bash
+ffmpeg -y -i 0_jackson_0.wav -ar 16000 -ac 1 0_jackson_0_16k.wav
+ffmpeg -y -i 1_jackson_0.wav -ar 16000 -ac 1 1_jackson_0_16k.wav
+```
+
+转码后默认静态 decode 和 KV cache decode 都能正常运行，并且输出一致。
+
+## 13. KV64 重新导出卡在模型加载/初始化阶段
+
+为验证不同 KV prefill 长度，尝试重新导出：
+
+```bash
+HF_HOME=/data/huggingface_home python3 export/qwen3_asr_export.py \
+  --model-id Qwen/Qwen3-ASR-0.6B-hf \
+  --out-dir /data/qwen3-asr-ncnn/models/qwen3_asr_0_6b_runtime_kv64 \
+  --device cuda --dtype fp32 \
+  --text-seq-len 64 --export-kv-cache --kv-cache-len 64 \
+  --convert-ncnn --pnnx-bin /data/qwen3-asr-ncnn/build/pnnx/src/pnnx
+```
+
+第一次使用本地目录 `/data/qwen3-asr-ncnn/models/Qwen3-ASR-0.6B-hf` 失败，原因是
+processor/tokenizer 没有正确加载 `audio_token`。改用 cached model id
+`Qwen/Qwen3-ASR-0.6B-hf` 后，进程不再立即失败，但运行十几分钟后仍停在
+模型加载/初始化阶段，`/tmp/qwen3_kv64_export.log` 只有 `torch_dtype` deprecation
+warning，输出目录为空。
+
+当前处理：中止这次导出。已有验证先覆盖 static text64、static text128 和 KV48；
+KV64/KV128 导出矩阵后续需要单独排查环境和 processor 加载路径。

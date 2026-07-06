@@ -13,6 +13,76 @@
     "runtime": "text128 + CMake"
   },
   {
+    "name": "pdx_voice_kv_cache",
+    "type": "real_short_speech_kv_smoke",
+    "duration_seconds": 4.95,
+    "source": "https://github.com/pdx-cs-sound/wavs/blob/main/voice.wav",
+    "prepared_wav": "pdx_voice_16k.wav",
+    "prepare_command": "ffmpeg -y -i voice.wav -ar 16000 -ac 1 pdx_voice_16k.wav",
+    "pytorch_text": "This is a test of me recording my voice.",
+    "ncnn_text": "This is a test of me recording my voice.",
+    "match": true,
+    "note": "Experimental KV cache smoke test; validates text_prefill_kv + text_decode_kv on the main real voice sample.",
+    "runtime": "text48 + experimental KV cache"
+  },
+  {
+    "name": "kv_cache_batch_short",
+    "type": "ncnn_static_vs_kv_cache_comparison",
+    "duration_seconds": "0.42-4.95",
+    "source": "Local prepared samples from pdx-cs-sound/wavs and free-spoken-digit-dataset",
+    "prepared_wav": [
+      "pdx_voice_16k.wav",
+      "pdx_voice-note_16k.wav",
+      "0_jackson_0_16k.wav",
+      "1_jackson_0_16k.wav",
+      "natural_digit_0_16k.wav",
+      "random_digit_5_jackson_0_16k.wav"
+    ],
+    "static_model": "qwen3_asr_0_6b_runtime_text128",
+    "kv_model": "qwen3_asr_0_6b_runtime_kv48",
+    "results": [
+      {
+        "sample": "pdx_voice_16k.wav",
+        "static_text": "This is a test of me recording my voice.",
+        "kv_text": "This is a test of me recording my voice.",
+        "match": true
+      },
+      {
+        "sample": "pdx_voice-note_16k.wav",
+        "static_text": "啊。",
+        "kv_text": "啊。",
+        "match": true
+      },
+      {
+        "sample": "0_jackson_0_16k.wav",
+        "static_text": "Zero.",
+        "kv_text": "Zero.",
+        "match": true
+      },
+      {
+        "sample": "1_jackson_0_16k.wav",
+        "static_text": "一。",
+        "kv_text": "一。",
+        "match": true
+      },
+      {
+        "sample": "natural_digit_0_16k.wav",
+        "static_text": "Zero.",
+        "kv_text": "Zero.",
+        "match": true
+      },
+      {
+        "sample": "random_digit_5_jackson_0_16k.wav",
+        "static_text": "Five.",
+        "kv_text": "Five.",
+        "match": true
+      }
+    ],
+    "match": true,
+    "note": "Compares default ncnn static decode against experimental ncnn KV cache decode. Original 0_jackson_0.wav and 1_jackson_0.wav are 8 kHz and were converted to 16 kHz before testing.",
+    "runtime": "text128 static decode vs text48 experimental KV cache"
+  },
+  {
     "name": "hello_world",
     "type": "synthetic_short_speech",
     "duration_seconds": 1.36,
@@ -65,6 +135,25 @@
     "runtime": "text128 overlap chunking"
   },
   {
+    "name": "long_text_numbers_30",
+    "type": "synthetic_long_output_and_chunking",
+    "duration_seconds": 7.0,
+    "source": "Generated with espeak-ng",
+    "prepared_wav": "long_text_numbers_30_16k.wav",
+    "prepare_command": "espeak-ng -s 360 -w long_text_numbers_30_raw.wav \"one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twenty one twenty two twenty three twenty four twenty five twenty six twenty seven twenty eight twenty nine thirty\" && ffmpeg -y -i long_text_numbers_30_raw.wav -ar 16000 -ac 1 long_text_numbers_30_16k.wav",
+    "expected_text": "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twenty one twenty two twenty three twenty four twenty five twenty six twenty seven twenty eight twenty nine thirty",
+    "ncnn_text64": "One two three four five six seven eight nine ten eleven twelve thirteen 16, 17, 18, 1 twenty-four, twenty-five, twenty-six, twenty-seven, twenty",
+    "ncnn_text128": "One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen 16, 17, 18, 19, 20, 21, 22, 23 twenty-four, twenty-five, twenty-six, twenty-seven, twenty-eight, twenty-nine, thirty.",
+    "ncnn_text48_kv": "One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen 16, 17, 18, 19, 20, 21, 22, 23 twenty-four, twenty-five, twenty-six, twenty-seven, twenty-eight, twenty-nine, thirty.",
+    "chunks": 3,
+    "generated_tokens_text64": 48,
+    "generated_tokens_text128": 77,
+    "generated_tokens_text48_kv": 77,
+    "match": true,
+    "note": "Long-output stress sample. Static text64 truncates; static text128 and KV48 match each other under current chunk stitching baseline.",
+    "runtime": "text64 fails, text128 and text48 KV align"
+  },
+  {
     "name": "long_text_numbers_fast",
     "type": "synthetic_long_text_capacity",
     "duration_seconds": 2.22,
@@ -74,8 +163,9 @@
     "pytorch_text": "One two three four five six seven eight nine ten eleven twelve thirteen fourteen.",
     "ncnn_text64": "One two three four five six seven eight nine ten eleven twelve thirteen",
     "ncnn_text128": "One two three four five six seven eight nine ten eleven twelve thirteen fourteen.",
+    "ncnn_text48_kv": "One two three four five six seven eight nine ten eleven twelve thirteen fourteen.",
     "match": true,
-    "note": "text_seq_len=64 truncates this sample; text_seq_len=128 matches PyTorch.",
-    "runtime": "text64 fails, text128 passes"
+    "note": "text_seq_len=64 truncates this sample; text_seq_len=128 matches PyTorch. KV48 also emits the complete text because only prefill is bounded by text_seq_len and later tokens grow through cache.",
+    "runtime": "text64 fails, text128 and text48 KV pass"
   }
 ]

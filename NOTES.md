@@ -91,6 +91,10 @@ C++ log-mel 与 Hugging Face 路径对比：
 | `digit_five` | text64 | 0.42s | `Five.` | `Five.` | 通过 |
 | `long_text_numbers_fast` | text64 | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen` | 截断 |
 | `long_text_numbers_fast` | text128 | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | 通过 |
+| `long_text_numbers_fast` | text48 + KV cache | 2.22s | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | `One two three four five six seven eight nine ten eleven twelve thirteen fourteen.` | 通过 |
+| `long_text_numbers_30` | text64 | 7.00s | 合成 one 到 thirty | `One two ... thirteen 16, 17, 18, 1 twenty-four ... twenty` | 截断/拼接不完整 |
+| `long_text_numbers_30` | text128 | 7.00s | 合成 one 到 thirty | `One two ... sixteen 16, 17, 18, 19, 20, 21, 22, 23 twenty-four ... thirty.` | 通过当前拼接基线 |
+| `long_text_numbers_30` | text48 + KV cache | 7.00s | 合成 one 到 thirty | 与 text128 输出一致 | 通过当前拼接基线 |
 | `long_digit_five` | text128 overlap chunking | 16.97s | `By by` | `By by by by by by five, five, five.` | 长音频拼接限制 |
 
 `long_digit_five` 是人工重复样本，不适合作为语义正确性的主要 benchmark。
@@ -104,7 +108,9 @@ C++ log-mel 与 Hugging Face 路径对比：
 - 每个 chunk 仍然独立 decode，再做文本拼接。
 - `text_seq_len=64` 会限制 prompt + 生成文本长度；已验证重新导出
   `text_seq_len=128` 可以解决当前长文本样例截断问题。
-- 还没有 KV cache。
+- 已加入实验性 KV cache 导出/runtime 路径。当前在 6 条短音频样例和 2 条长输出
+  压力样例上与对应静态路径对齐。KV48 已验证；KV64 重新导出在当前 VM 上卡在
+  模型加载/初始化阶段，需要后续单独排查。
 - 还没有 timestamps / forced aligner。
 - 还没有第二平台验证。
 
@@ -164,8 +170,34 @@ One two three four five six seven eight nine ten eleven twelve thirteen
 One two three four five six seven eight nine ten eleven twelve thirteen fourteen.
 ```
 
-结论：长文本截断不是 ncnn runtime 逻辑错误，而是 `text_backbone` 静态长度太小。
-通过 `--text-seq-len 128` 重新导出可以解决当前样例。
+同一样例在 KV cache 路径下使用 `qwen3_asr_0_6b_runtime_kv48` 也输出完整句子。
+这里的原因是 KV 路径只要求 prefill 的 prompt/audio 长度不超过 `text_seq_len`；
+后续生成 token 通过 cache 增长，不再像静态 decode 一样每步受完整
+`prompt + generated` 长度限制。
+
+结论：静态 decode 的长文本截断不是 ncnn runtime 逻辑错误，而是 `text_backbone`
+静态长度太小。通过 `--text-seq-len 128` 重新导出可以解决当前样例；KV cache
+路径可以绕开“每步重跑完整序列”的长度增长问题。
+
+进一步生成了 7.00 秒的 one 到 thirty 合成长输出样例：
+
+```bash
+espeak-ng -s 360 -w long_text_numbers_30_raw.wav \
+  "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twenty one twenty two twenty three twenty four twenty five twenty six twenty seven twenty eight twenty nine thirty"
+ffmpeg -y -i long_text_numbers_30_raw.wav \
+  -ar 16000 -ac 1 long_text_numbers_30_16k.wav
+```
+
+结果：
+
+| runtime | chunk 数 | 生成 token 数 | 输出摘要 | 结论 |
+| --- | ---: | ---: | --- | --- |
+| text64 | 3 | 48 | `One two ... thirteen 16, 17, 18, 1 twenty-four ... twenty` | 截断/拼接不完整 |
+| text128 | 3 | 77 | `One two ... sixteen 16, 17, 18, 19, 20, 21, 22, 23 twenty-four ... thirty.` | 通过当前拼接基线 |
+| text48 + KV cache | 3 | 77 | 与 text128 完全一致 | 通过当前拼接基线 |
+
+这个样例仍经过 chunking，因此它同时测试了“较长输出”和“跨 chunk 拼接”。
+text128 与 KV48 对齐，说明 KV cache 的多步生成在当前长输出压力下没有漂移。
 
 ## 10. 长音频 overlap/stitching 验证
 
@@ -186,8 +218,75 @@ runtime 已加入带 overlap 的固定窗口 chunking：
 ## 11. 下一步
 
 1. 做第二平台 build/smoke test。
-2. 继续改进长音频 overlap/stitching，例如加入更稳的 overlap 长度选择、
+2. 排查 KV64 重新导出在当前 VM 上卡在模型加载/初始化阶段的问题。
+3. 继续改进长音频 overlap/stitching，例如加入更稳的 overlap 长度选择、
    置信度/时间戳辅助和跨 chunk 上下文。
-3. 增加 KV cache。
 4. 做更大静态 shape 或更灵活的导出策略。
 5. 整理 PR 说明和 Discussion 回复。
+
+## 12. KV cache 实验记录
+
+目标：让文本 decoder 不必每生成一个 token 都重新跑完整 prompt，而是先跑一次
+prefill 得到每层 K/V cache，再逐 token decode。
+
+当前实现：
+
+- exporter 新增 `--export-kv-cache` 和 `--kv-cache-len`。
+- 额外导出 `text_prefill_kv` 和 `text_decode_kv`。
+- C++ runtime 新增 `--use-kv-cache`，默认仍走稳定的静态 decode。
+- decode 图把 RoPE 的 `cos/sin` 作为输入，由 C++ 按当前 position 生成。
+
+关键问题和修复：
+
+1. 直接用 Transformers `use_cache=True` trace 会在 mask/cache 逻辑中失败，因此改成
+   手写每层 attention 的 prefill/decode wrapper。
+2. 初版 one-token decode 图按 `cache_len=48` trace，pnnx 把 cache concat 后的
+   repeated-KV reshape 写死成 `1=49`。第一步 decode 正常，第二步 cache 变成 49
+   后再 concat 到 50，但图仍按 49 reshape，输出开始漂移。
+3. 尝试在 C++ 中把 cache 裁回固定窗口会破坏 prompt/audio context，结果更差。
+4. 使用 `inputshape2` 可以让 pnnx 推断动态 cache 维度，但生成的 ncnn param 带
+   `pnnx.Expression`，当前 runtime 不能加载。
+5. 最终采用后处理：只把 `text_decode_kv.ncnn.param` 中 cache repeat 后的
+   `Reshape 0=128 1=49 2=16` 改成 `Reshape 0=128 1=-1 2=16`。ncnn 可以加载，
+   并允许 cache 随 decode 步数增长。
+
+验证环境：
+
+- 默认静态路径：`qwen3_asr_0_6b_runtime_text128`
+- KV cache 路径：`qwen3_asr_0_6b_runtime_kv48`
+- binary：正式 CMake build 的 `qwen3_asr_main`
+- 平台：Linux VM + RTX 4090
+
+短样例批量对比结果：
+
+| 样本 | 时长 | 默认静态 decode | KV cache decode | 结论 |
+| --- | ---: | --- | --- | --- |
+| `pdx_voice_16k.wav` | 4.95s | `This is a test of me recording my voice.` | `This is a test of me recording my voice.` | 对齐 |
+| `pdx_voice-note_16k.wav` | 1.40s | `啊。` | `啊。` | 对齐 |
+| `0_jackson_0_16k.wav` | 0.64s | `Zero.` | `Zero.` | 对齐 |
+| `1_jackson_0_16k.wav` | 0.52s | `一。` | `一。` | 对齐 |
+| `natural_digit_0_16k.wav` | 0.64s | `Zero.` | `Zero.` | 对齐 |
+| `random_digit_5_jackson_0_16k.wav` | 0.42s | `Five.` | `Five.` | 对齐 |
+
+补充：原始 `0_jackson_0.wav` 和 `1_jackson_0.wav` 是 8 kHz，runtime 会按预期拒绝；
+测试时先用 `ffmpeg -ar 16000 -ac 1` 转成 16 kHz。
+
+长输出对比结果：
+
+| 样本 | 默认静态 decode | KV cache decode | 结论 |
+| --- | --- | --- | --- |
+| `long_text_numbers_fast_16k.wav` | text128 输出完整 one 到 fourteen | KV48 输出一致 | 对齐 |
+| `long_text_numbers_30_16k.wav` | text128 生成 77 tokens | KV48 生成 77 tokens，输出一致 | 对齐 |
+
+不同 `text_seq_len` 结论：
+
+- 静态 text64 会因为 `prompt + generated` 长度耗尽而截断。
+- 静态 text128 可以覆盖当前长文本样例。
+- KV48 的 prefill 长度刚好等于当前 prompt 长度 48，后续生成靠 cache 增长；
+  因此它可以输出超过 48 token context 的长结果。
+- KV64 重新导出尝试过一次，但当前 VM 上进程长时间停在模型加载/初始化阶段，
+  `/tmp/qwen3_kv64_export.log` 只有 `torch_dtype` deprecation warning，输出目录为空；
+  这不是 ncnn runtime 失败，需要后续单独排查导出环境/processor 加载。
+
+结论：KV cache 路径在短样例和当前长输出样例上已经和默认静态路径对齐。它仍应
+标记为实验性，因为还没有第二平台验证，也还没有完成 KV64/KV128 导出矩阵。
