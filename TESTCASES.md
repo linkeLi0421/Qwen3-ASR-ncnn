@@ -140,6 +140,22 @@ macOS 15.7.4 / Apple M1 Pro / arm64 / CPU-only
 text=This is a test of me recording my voice.
 ```
 
+## KV cache timing
+
+环境：Linux VM，`--threads 8`，CPU ncnn runtime，未启用 Vulkan。
+
+| 样本 | 模式 | chunks | tokens | decode ms | total measured ms | speedup |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `pdx_voice` | static text128 | 2 | 17 | 15639.420 | 16043.518 | 1.00x |
+| `pdx_voice` | KV48 | 2 | 17 | 2323.650 | 2578.159 | 6.22x |
+| `long_text_numbers_fast` | static text128 | 1 | 18 | 13429.100 | 13572.517 | 1.00x |
+| `long_text_numbers_fast` | KV48 | 1 | 18 | 2393.070 | 2677.900 | 5.07x |
+| `long_text_numbers_30` | static text128 | 3 | 77 | 46648.300 | 47290.855 | 1.00x |
+| `long_text_numbers_30` | KV48 | 3 | 77 | 13059.710 | 13902.612 | 3.40x |
+
+补充：VM 上 ncnn 是 `NCNN_VULKAN=ON`，但 `--vulkan` 只枚举到 `llvmpipe`
+软件 Vulkan device，不是 RTX 4090；该路径 smoke 输出不可靠，未纳入有效 timing。
+
 ### `pdx_voice`
 
 来源：

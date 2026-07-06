@@ -233,3 +233,18 @@ warning，输出目录为空。
 
 当前处理：中止这次导出。已有验证先覆盖 static text64、static text128 和 KV48；
 KV64/KV128 导出矩阵后续需要单独排查环境和 processor 加载路径。
+
+## 14. 4090 VM 上 Vulkan 未使用到 RTX 4090
+
+为了确认 KV cache 是否能在 4090 上进一步加速，尝试用 `--vulkan` 跑
+`qwen3_asr_main`。ncnn build 中 `NCNN_VULKAN=ON`，但实际枚举到的是：
+
+```text
+llvmpipe (LLVM 20.1.2, 256 bits)
+```
+
+这说明当前 Vulkan runtime 走的是软件 Vulkan device，不是 RTX 4090。该路径的
+smoke 输出也不可靠，因此没有把 `--vulkan` 结果纳入有效 timing。
+
+当前有效 timing 是 Linux VM 上的 CPU ncnn runtime（`--threads 8`）。KV48 在
+这些 CPU runtime 样例上已经有 3.40x 到 6.22x 的 total measured speedup。

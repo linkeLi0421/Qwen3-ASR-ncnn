@@ -56,6 +56,10 @@ text64 会截断在 `... twelve thirteen`，text128 可以完整输出到
 完整 long_text_numbers_fast；在 7 秒 one-to-thirty 压力样例上，KV48 与
 text128 输出一致，生成 77 个 token。
 
+KV cache timing 也已补充：在 Linux VM 的 CPU ncnn runtime 上，KV48 相比
+static text128 的 total measured speedup 约为 3.40x 到 6.22x。RTX 4090 GPU/Vulkan
+加速仍未验证，因为当前 `--vulkan` 只枚举到 `llvmpipe` 软件 Vulkan device。
+
 长音频 overlap/stitching 回归结果：
 
 ```text

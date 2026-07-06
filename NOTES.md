@@ -273,10 +273,12 @@ runtime 已加入带 overlap 的固定窗口 chunking：
 ## 11. 下一步
 
 1. 排查 KV64 重新导出在当前 VM 上卡在模型加载/初始化阶段的问题。
-2. 继续改进长音频 overlap/stitching，例如加入更稳的 overlap 长度选择、
+2. 排查 4090 VM 上 ncnn Vulkan 只看到 `llvmpipe` 软件设备的问题；当前 timing
+   仍是 CPU ncnn runtime，不是 RTX 4090 GPU timing。
+3. 继续改进长音频 overlap/stitching，例如加入更稳的 overlap 长度选择、
    置信度/时间戳辅助和跨 chunk 上下文。
-3. 做更大静态 shape 或更灵活的导出策略。
-4. 整理 PR 说明和 Discussion 回复。
+4. 做更大静态 shape 或更灵活的导出策略。
+5. 整理 PR 说明和 Discussion 回复。
 
 ## 12. KV cache 实验记录
 
@@ -344,3 +346,55 @@ prefill 得到每层 K/V cache，再逐 token decode。
 
 结论：KV cache 路径在短样例和当前长输出样例上已经和默认静态路径对齐。它仍应
 标记为实验性，因为还没有完成 KV64/KV128 导出矩阵，也还需要更多平台/样例覆盖。
+
+## 13. KV cache timing
+
+为判断 KV cache 是否只有结构意义，还是已经带来实际性能收益，给
+`qwen3_asr_main` 增加了粗粒度 timing 输出：
+
+- `audio_encoder_time_ms`
+- `prefill_time_ms`
+- `decode_step_time_ms[i]`
+- `decode_total_time_ms`
+
+测试环境：
+
+| 项目 | 值 |
+| --- | --- |
+| 平台 | Linux VM |
+| GPU | RTX 4090 24 GB present |
+| ncnn runtime | CPU path，`--vulkan` 未启用 |
+| threads | 8 |
+| static model | `qwen3_asr_0_6b_runtime_text128` |
+| KV model | `qwen3_asr_0_6b_runtime_kv48` |
+
+结果：
+
+| 样本 | 模式 | chunk | tokens | audio ms | decode ms | total measured ms | 输出 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `pdx_voice` | static text128 | 2 | 17 | 404.098 | 15639.420 | 16043.518 | 正确 |
+| `pdx_voice` | KV48 | 2 | 17 | 254.509 | 2323.650 | 2578.159 | 正确 |
+| `long_text_numbers_fast` | static text128 | 1 | 18 | 143.417 | 13429.100 | 13572.517 | 正确 |
+| `long_text_numbers_fast` | KV48 | 1 | 18 | 284.830 | 2393.070 | 2677.900 | 正确 |
+| `long_text_numbers_30` | static text128 | 3 | 77 | 642.555 | 46648.300 | 47290.855 | 对齐当前基线 |
+| `long_text_numbers_30` | KV48 | 3 | 77 | 842.902 | 13059.710 | 13902.612 | 对齐当前基线 |
+
+速度比：
+
+| 样本 | total measured speedup | decode-only speedup | per-step avg speedup |
+| --- | ---: | ---: | ---: |
+| `pdx_voice` | 6.22x | 6.73x | 7.46x |
+| `long_text_numbers_fast` | 5.07x | 5.61x | 6.02x |
+| `long_text_numbers_30` | 3.40x | 3.57x | 4.01x |
+
+解释：
+
+- KV cache 在当前 CPU runtime 上已经有明显收益，尤其是 token-by-token text
+  decoder 部分。
+- audio encoder 时间不稳定，且不是 KV cache 优化目标；判断 KV 收益应主要看
+  decode-only 和 per-step avg。
+- 长输出样例里 speedup 降低到约 3.4x，是因为多 chunk、prefill 和 cache I/O
+  占比上升。
+- 这还不是 RTX 4090 GPU timing。检查 `--vulkan` 时，ncnn 只枚举到
+  `llvmpipe (LLVM 20.1.2, 256 bits)` 软件 Vulkan device，而不是 4090；
+  并且 `--vulkan` smoke 输出不可靠，因此当前不把 Vulkan 结果作为有效性能数据。

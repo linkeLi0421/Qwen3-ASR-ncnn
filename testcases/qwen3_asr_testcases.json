@@ -98,6 +98,58 @@
     "runtime": "text128 static decode vs text48 experimental KV cache"
   },
   {
+    "name": "kv_cache_timing_cpu",
+    "type": "performance_comparison",
+    "platform": "Linux VM with RTX 4090 present, CPU ncnn runtime, --threads 8",
+    "static_model": "qwen3_asr_0_6b_runtime_text128",
+    "kv_model": "qwen3_asr_0_6b_runtime_kv48",
+    "vulkan_note": "NCNN_VULKAN=ON, but --vulkan enumerated llvmpipe software Vulkan device instead of RTX 4090 and was not used for valid timing.",
+    "results": [
+      {
+        "sample": "pdx_voice",
+        "duration_seconds": 4.95,
+        "chunks": 2,
+        "generated_tokens": 17,
+        "static_total_ms": 16043.518,
+        "kv_total_ms": 2578.159,
+        "static_decode_ms": 15639.42,
+        "kv_decode_ms": 2323.65,
+        "total_speedup": 6.22,
+        "decode_speedup": 6.73,
+        "match": true
+      },
+      {
+        "sample": "long_text_numbers_fast",
+        "duration_seconds": 2.22,
+        "chunks": 1,
+        "generated_tokens": 18,
+        "static_total_ms": 13572.517,
+        "kv_total_ms": 2677.9,
+        "static_decode_ms": 13429.1,
+        "kv_decode_ms": 2393.07,
+        "total_speedup": 5.07,
+        "decode_speedup": 5.61,
+        "match": true
+      },
+      {
+        "sample": "long_text_numbers_30",
+        "duration_seconds": 7.0,
+        "chunks": 3,
+        "generated_tokens": 77,
+        "static_total_ms": 47290.855,
+        "kv_total_ms": 13902.612,
+        "static_decode_ms": 46648.3,
+        "kv_decode_ms": 13059.71,
+        "total_speedup": 3.4,
+        "decode_speedup": 3.57,
+        "match": true
+      }
+    ],
+    "match": true,
+    "note": "KV48 gives clear CPU-runtime speedups while preserving text output on these samples.",
+    "runtime": "static text128 vs text48 KV"
+  },
+  {
     "name": "hello_world",
     "type": "synthetic_short_speech",
     "duration_seconds": 1.36,

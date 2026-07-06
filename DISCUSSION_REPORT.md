@@ -265,3 +265,30 @@ text=This is a test of me recording my voice.
 
 - Linux + RTX 4090 VM
 - macOS arm64 + Apple M1 Pro CPU-only
+
+## 13. KV cache timing
+
+为了确认 KV cache 是否带来实际性能收益，给 `qwen3_asr_main` 加了粗粒度 timing
+输出，并在 Linux VM 上对比 static text128 与 KV48。这里使用 CPU ncnn runtime
+和 `--threads 8`，没有启用 Vulkan。
+
+| 样本 | 模式 | chunk | tokens | audio ms | decode ms | total measured ms | 结论 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `pdx_voice` | static text128 | 2 | 17 | 404.098 | 15639.420 | 16043.518 | 正确 |
+| `pdx_voice` | KV48 | 2 | 17 | 254.509 | 2323.650 | 2578.159 | 正确 |
+| `long_text_numbers_fast` | static text128 | 1 | 18 | 143.417 | 13429.100 | 13572.517 | 正确 |
+| `long_text_numbers_fast` | KV48 | 1 | 18 | 284.830 | 2393.070 | 2677.900 | 正确 |
+| `long_text_numbers_30` | static text128 | 3 | 77 | 642.555 | 46648.300 | 47290.855 | 对齐当前基线 |
+| `long_text_numbers_30` | KV48 | 3 | 77 | 842.902 | 13059.710 | 13902.612 | 对齐当前基线 |
+
+速度比：
+
+| 样本 | total measured speedup | decode-only speedup |
+| --- | ---: | ---: |
+| `pdx_voice` | 6.22x | 6.73x |
+| `long_text_numbers_fast` | 5.07x | 5.61x |
+| `long_text_numbers_30` | 3.40x | 3.57x |
+
+结论：KV cache 在当前 CPU runtime 上已经有明显收益，主要来自避免每个 token
+重复跑完整 text backbone。4090 GPU 加速仍未验证：当前 `--vulkan` 只枚举到
+`llvmpipe` 软件 Vulkan device，而不是 RTX 4090，并且 smoke 输出不可靠。
