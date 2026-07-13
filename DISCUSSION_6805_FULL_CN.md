@@ -7,7 +7,7 @@ https://github.com/linkeLi0421/ncnn_llm/tree/qwen3-asr-export
 当前实现分支最新提交：
 
 ```text
-89394d2 Gate Qwen3-ASR timing logs behind flag
+a6b650d Track Qwen3-ASR local memory smoke metrics
 ```
 
 记录仓库：
@@ -206,6 +206,34 @@ runtime。下一步应重点补齐：
 - 更大的静态 shape 或更灵活的导出策略；
 - 更多平台和样例覆盖；
 - PR 前的代码和文档整理。
+
+补充：按照后续更严格的验证建议，现在不再把“单个 demo 音频跑通”视为完成标准。
+实现分支已增加 `tests/qwen3_asr` 分层测评入口，覆盖固定音频前处理 summary、
+三类中文 fixture、strict/semantic normalized text、ncnn 首步模块 summary、
+平台 smoke 和最小复测命令。
+
+当前本机分层结果：
+
+| 层级 | 当前状态 |
+| --- | --- |
+| 音频前处理 parity | C++ mel summary 已有；PyTorch summary 待补 |
+| 三类中文 fixture | macOS TTS fixture 已有；真人中文待补 |
+| normalized text 对齐 | strict：短中文通过，长中文和中英混合失败；semantic：短中文和中英混合通过，长中文失败 |
+| 模块级误差 | 旧模块对比已有；新 ASR 分段 ncnn summary 已有，PyTorch summary 待补 |
+| 多平台 smoke | macOS arm64 CPU-only 已有；Linux/Windows 最新分层 smoke 待补 |
+| 最小复测命令 | CLI 已支持，脚本已整理 |
+
+三类中文 fixture 当前结果：
+
+| fixture | 类型 | strict normalized | semantic normalized | 说明 |
+| --- | --- | --- | --- | --- |
+| `zh_short_tts` | 短中文普通话 | PASS | PASS | 输出和期望一致 |
+| `zh_long_tts` | 较长中文音频 | FAIL | FAIL | 能输出到尾部，但有 `剪检查`、`对其` 等错误 |
+| `zh_mixed_tts` | 中文夹英文/数字/标点 | FAIL | PASS | `OpenAI API` 的缩写写法造成 strict 失败 |
+
+因此当前结论应表述为：ncnn 转换和 C++ runtime 路径可行，但如果按“最终文本与
+PyTorch 原版一致”作为完成标准，还需要补 PyTorch 同格式 summary、真实中文样例、
+严格文本对齐和 Linux/Windows/Vulkan 分层验证。
 
 ## 11. KV cache 补充实验
 

@@ -411,3 +411,52 @@ qwen3_asr_main \
 - 这还不是 RTX 4090 GPU timing。检查 `--vulkan` 时，ncnn 只枚举到
   `llvmpipe (LLVM 20.1.2, 256 bits)` 软件 Vulkan device，而不是 4090；
   并且 `--vulkan` smoke 输出不可靠，因此当前不把 Vulkan 结果作为有效性能数据。
+
+## 14. 按 FunASR / Qwen3-ASR 建议重做的本机分层测评
+
+后续讨论里有人提出一个关键建议：不要只看 demo 音频能不能跑，而是把
+“ncnn 输出最终文本须与 PyTorch 原版一致”拆成几层验证。这个建议是合理的，
+因此实现分支现在增加了本机可重复的分层测评入口：
+
+```text
+https://github.com/linkeLi0421/ncnn_llm/tree/qwen3-asr-export/tests/qwen3_asr
+```
+
+相关文件：
+
+| 文件 | 用途 |
+| --- | --- |
+| `fixtures.local.json` | 记录三类本机中文 fixture、期望文本和输出路径 |
+| `make_chinese_fixtures.sh` | 用 macOS `say` 生成短中文、较长中文、中英混合音频 |
+| `run_fixture.sh` | 调用 `qwen3_asr_main`，输出 `.txt`、`.json` 和 mel summary |
+| `evaluate_fixtures.py` | 比较 raw、clean、strict normalized、semantic normalized text |
+| `collect_platform_smoke.py` | 汇总 OS、CPU、线程数、RTF、峰值内存等平台 smoke 信息 |
+| `COMPLETION_STATUS.md` | 明确什么条件下才算接近 issue 完成 |
+
+新的完成标准：
+
+| 层级 | 当前状态 |
+| --- | --- |
+| 音频前处理 parity | C++ mel summary 已有；PyTorch summary 待补 |
+| 三类中文 fixture | macOS TTS fixture 已有；真人中文待补 |
+| normalized text 对齐 | strict：短中文通过，长中文和中英混合失败；semantic：短中文和中英混合通过，长中文失败 |
+| 模块级误差 | 旧模块对比已有；新 ASR 分段 ncnn summary 已有，PyTorch summary 待补 |
+| 多平台 smoke | macOS arm64 CPU-only 已有；Linux/Windows 最新分层 smoke 待补 |
+| 最小复测命令 | CLI 已支持，`run_fixture.sh` 已整理 |
+
+三类中文 fixture 当前结果：
+
+| fixture | 类型 | strict normalized | semantic normalized | 观察 |
+| --- | --- | --- | --- | --- |
+| `zh_short_tts` | 短中文普通话 | PASS | PASS | 输出和期望一致 |
+| `zh_long_tts` | 较长中文音频 | FAIL | FAIL | 长输出已经能到尾部，但仍有个别词错误，例如 `剪检查`、`对其` |
+| `zh_mixed_tts` | 中文夹英文/数字/标点 | FAIL | PASS | `OpenAI API` 被识别成音近缩写写法；语义规则可归一，但 strict 不通过 |
+
+当前判断：
+
+- 本机已经能完成 CLI、fixture、mel summary、ncnn first-step summary、normalized
+  text report、macOS platform smoke 和短样例峰值内存记录。
+- 本机不能完整替代 Linux/4090 VM，因为 PyTorch Qwen3-ASR baseline、Linux/Windows
+  build smoke、Vulkan/4090 timing 仍需要相应环境。
+- 下一步最有价值的是在 VM 上补 PyTorch 同格式 summary，再把 ncnn summary 和
+  PyTorch summary 做模块级误差表；然后用真实中文录音替换或补充 macOS TTS fixture。

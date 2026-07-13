@@ -66,6 +66,56 @@ ffmpeg -y -i input.wav -ar 16000 -ac 1 output_16k.wav
 | `long_digit_five` | 人工重复压力样例 | text128 overlap chunking | 16.97s | `By by` | `By by by by by by five, five, five.` | 不作为语义正确性 benchmark |
 | `pdx_voice_macos_cpu` | 第二平台 smoke test | macOS arm64 CPU-only text128 | 4.95s | `This is a test of me recording my voice.` | `This is a test of me recording my voice.` | 通过 |
 
+## 中文 fixture 分层评估
+
+为了对齐上游建议，新增了三类中文 fixture，而不是只测试英文 demo 音频：
+
+- 短中文普通话；
+- 较长中文音频；
+- 中文夹英文、数字、标点。
+
+fixture schema 和评估脚本在实现仓库：
+
+```text
+https://github.com/linkeLi0421/ncnn_llm/tree/qwen3-asr-export/tests/qwen3_asr
+```
+
+本机音频由 macOS `say` 生成，再用 `ffmpeg` 转成 16 kHz mono PCM16 WAV。生成脚本：
+
+```bash
+tests/qwen3_asr/make_chinese_fixtures.sh /Users/link/llk/test_audio/chinese_fixtures
+```
+
+运行单个 fixture：
+
+```bash
+tests/qwen3_asr/run_fixture.sh \
+  /Users/link/llk/test_audio/chinese_fixtures/zh_short_16k.wav \
+  zh_short_current \
+  /Users/link/llk/test_audio/chinese_fixtures
+```
+
+评估三类 fixture：
+
+```bash
+python3 tests/qwen3_asr/evaluate_fixtures.py \
+  --fixtures tests/qwen3_asr/fixtures.local.json \
+  --out-dir /Users/link/llk/test_audio/chinese_fixtures \
+  --report-json /Users/link/llk/test_audio/chinese_fixtures/eval_report.json \
+  --report-md /Users/link/llk/test_audio/chinese_fixtures/eval_report.md
+```
+
+当前本机结果：
+
+| fixture | 类型 | expected 摘要 | ncnn 摘要 | strict | semantic |
+| --- | --- | --- | --- | --- | --- |
+| `zh_short_tts` | 短中文普通话 | `今天天气很好，我们一起测试语音识别。` | 一致 | PASS | PASS |
+| `zh_long_tts` | 较长中文音频 | 包含前处理、模块误差、文本对齐、smoke test | 基本到尾部，但有 `剪检查`、`对其` 等错误 | FAIL | FAIL |
+| `zh_mixed_tts` | 中文夹英文/数字/标点 | 包含 `OpenAI API`、日期和订单编号 | 语义接近，但英文缩写写法不同 | FAIL | PASS |
+
+这里把 strict normalized 和 semantic normalized 分开记录。strict 是正式输出契约；
+semantic 只用于判断是否是缩写、空格、标点等后处理差异，不能替代 strict 通过。
+
 ## KV cache 批量对比
 
 测试目的：验证实验性 `text_prefill_kv` + `text_decode_kv` 路径是否和默认静态 decode
