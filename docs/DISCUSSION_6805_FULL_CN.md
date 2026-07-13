@@ -15,7 +15,7 @@ https://github.com/linkeLi0421/Qwen3-ASR-ncnn
 当前实现分支提交：
 
 ```text
-3109bf9 Document Qwen3-ASR local smoke memory metrics
+5cf4fb6 Support Linux memory metrics for Qwen3-ASR fixtures
 ```
 
 ## 1. 当前结论
@@ -65,27 +65,32 @@ C++ runtime 负责：
 tests/qwen3_asr
 ```
 
-当前本机结果：
+当前结果：
 
 | 层级 | 当前状态 |
 | --- | --- |
-| 音频前处理 parity | C++ mel summary 已有；PyTorch 同 schema summary 待补 |
+| 音频前处理 parity | ncnn C++ mel summary 和 PyTorch mel summary 已有；数值 diff 待补 |
 | 三类中文 fixture | 本机 TTS fixture 已有：短中文、较长中文、中英数字混合；真人中文待补 |
-| normalized text 对齐 | strict：1/3 通过；semantic：2/3 通过 |
-| 模块级定位 | ncnn 侧 audio embedding、merged embedding、hidden、logits summary 已有；PyTorch 对应 summary 待补 |
-| 多平台 smoke | macOS CPU-only 已有；Linux/Windows 最新分层 smoke 待补 |
+| normalized text 对齐 | PyTorch baseline 已补；ncnn strict：1/3 通过；ncnn semantic：2/3 通过 |
+| 模块级定位 | ncnn 侧 audio embedding、merged embedding、hidden、logits summary 已有；PyTorch 对应模块误差表待补 |
+| 多平台 smoke | macOS CPU-only 已有；Linux CPU smoke 已有；Windows 待补 |
 | 最小复测命令 | `qwen3_asr_main --model ... --audio-wav ... --text-out ... --json-out ... --dump-mel-summary ...` 已支持 |
 
-三类中文 fixture：
+三类中文 fixture，Linux VM CPU ncnn runtime 对比同机 PyTorch baseline：
 
-| fixture | strict | semantic | chunks | RTF | peak RSS | 说明 |
-| --- | --- | --- | ---: | ---: | ---: | --- |
-| `zh_short_tts` | PASS | PASS | 2 | 10.71 | 3485.5 MiB | 短中文输出和期望一致 |
-| `zh_long_tts` | FAIL | FAIL | 9 | 11.36 | 3463.8 MiB | 长中文能输出到尾部，但仍有 `剪检查`、`对其` 等错误 |
-| `zh_mixed_tts` | FAIL | PASS | 4 | 10.33 | 3448.0 MiB | `OpenAI API` 被识别成音近缩写写法，semantic 可归一但 strict 不通过 |
+| fixture | ncnn strict | ncnn semantic | PyTorch strict | PyTorch semantic | chunks | Linux RTF | Linux peak RSS | 说明 |
+| --- | --- | --- | --- | --- | ---: | ---: | ---: | --- |
+| `zh_short_tts` | PASS | PASS | PASS | PASS | 2 | 5.79 | 4739.0 MiB | 短中文输出和期望一致 |
+| `zh_long_tts` | FAIL | FAIL | PASS | PASS | 9 | 4.72 | 4738.5 MiB | PyTorch 正确，ncnn 长音频仍有 `剪检查`、`对其` |
+| `zh_mixed_tts` | FAIL | PASS | FAIL | FAIL | 4 | 4.54 | 4739.1 MiB | PyTorch 自身输出 `Open API`，fixture expected `OpenAI API` 过严；ncnn 还会把英文缩写拆散 |
 
 这里 strict normalized 是正式输出契约。semantic normalized 只用来标记缩写、空格、
 标点等可解释差异，不能替代 strict 通过。
+
+Linux VM 说明：RTX 4090 可以由 `nvidia-smi` 看到，但当前 Vulkan 只枚举到
+`llvmpipe`，所以这里不是 4090/Vulkan 性能。原始 ncnn build 在这个 VM 上会在
+`get_data_cache_size()` 触发 CPU cache parsing 的 `SIGFPE`；本次 Linux smoke 使用
+本地临时 patched ncnn build 继续验证 Qwen3-ASR runtime。
 
 ## 4. 已经支持的复测入口
 
@@ -119,23 +124,24 @@ tests/qwen3_asr/run_fixture.sh \
 
 ## 5. 当前限制
 
-- 本机还没有原版 PyTorch Qwen3-ASR 环境，因此 PyTorch 同 schema summary 待补。
 - 还没有真实中文录音 fixture。
 - 长中文 strict 文本仍未对齐。
-- 当前 macOS smoke 是 CPU-only 结果，不代表 GPU/Vulkan 性能。
-- Linux/Windows 最新分层 smoke 待补。
+- 当前 macOS 和 Linux smoke 都是 CPU runtime 结果，不代表 GPU/Vulkan 性能。
+- Windows 最新分层 smoke 待补。
 - 4090/Vulkan 需要单独验证设备可见性和输出可靠性。
+- PyTorch 与 ncnn 的模块级误差表还没补齐。
 
 ## 6. 建议下一步
 
-下一步不应继续扩大零散 demo，而应该补齐 PyTorch baseline：
+下一步不应继续扩大零散 demo，而应该补齐模块级定位和真实音频覆盖：
 
-1. 用原版 PyTorch Qwen3-ASR 跑同一批 fixture。
-2. 保存 PyTorch text、mel summary、encoder/projector/decoder 首轮 logits summary。
-3. 对比 ncnn 和 PyTorch 的 `max_abs`、`mean_abs`、`p99_abs`、cosine similarity、
+1. 保存 PyTorch encoder/projector/decoder 首轮 logits summary。
+2. 对比 ncnn 和 PyTorch 的 `max_abs`、`mean_abs`、`p99_abs`、cosine similarity、
    top-k logits agreement。
-4. 用真实中文录音补充短中文、长中文、中英数字混合三类 fixture。
-5. 再做 Linux/Windows smoke 和单独的 Vulkan/4090 性能表。
+3. 用真实中文录音补充短中文、长中文、中英数字混合三类 fixture。
+4. 做 Windows smoke。
+5. 单独排查 4090/Vulkan 设备可见性。
+6. 将 Linux VM 上发现的 ncnn CPU cache parsing 问题整理为独立上游反馈或构建说明。
 
 所以当前更准确的状态是：ncnn 转换和 C++ runtime 路径已经打通，但还需要 PyTorch
-分层对齐和更多平台/真实音频验证，才能说这个 issue 真正完成。
+模块级对齐、真实音频验证和 GPU/Vulkan 验证，才能说这个 issue 真正完成。

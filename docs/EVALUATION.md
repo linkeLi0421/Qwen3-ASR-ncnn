@@ -27,7 +27,25 @@ https://github.com/linkeLi0421/ncnn_llm/tree/qwen3-asr-export/tests/qwen3_asr
 音频由 macOS `say` 生成，再转为 16 kHz mono PCM16 WAV。它们是本机稳定 fixture，
 不是最终真人语音覆盖。
 
-## 当前结果
+## 当前主结果
+
+Linux VM 上使用同一批 fixture 跑原版 PyTorch baseline 和 ncnn CPU runtime：
+
+| fixture | ncnn strict | ncnn semantic | PyTorch strict | PyTorch semantic | chunks | Linux RTF | Linux peak RSS | 说明 |
+| --- | --- | --- | --- | --- | ---: | ---: | ---: | --- |
+| `zh_short_tts` | PASS | PASS | PASS | PASS | 2 | 5.79 | 4739.0 MiB | 短中文通过 |
+| `zh_long_tts` | FAIL | FAIL | PASS | PASS | 9 | 4.72 | 4738.5 MiB | PyTorch 正确，ncnn 长音频仍有 `剪检查`、`对其` |
+| `zh_mixed_tts` | FAIL | PASS | FAIL | FAIL | 4 | 4.54 | 4739.1 MiB | PyTorch 自身输出 `Open API`，fixture expected `OpenAI API` 过严；ncnn 还会把英文缩写拆散 |
+
+这个结果把问题拆开了：
+
+- `zh_short_tts` 证明短中文端到端路径可用。
+- `zh_long_tts` 是当前最明确的 ncnn runtime/chunk stitching 缺口，因为 PyTorch baseline
+  对同一音频通过。
+- `zh_mixed_tts` 不能作为纯 ncnn 转换失败结论，因为 PyTorch baseline 本身也不满足
+  这个 fixture 的 strict expected。
+
+## macOS 本机结果
 
 | fixture | strict | semantic | chunks | RTF | peak RSS | notes |
 | --- | --- | --- | ---: | ---: | ---: | --- |
@@ -38,18 +56,38 @@ https://github.com/linkeLi0421/ncnn_llm/tree/qwen3-asr-export/tests/qwen3_asr
 strict normalized 是正式输出契约。semantic normalized 只用于记录缩写、空格、标点
 等可解释差异，不能替代 strict 通过。
 
+## Linux VM 环境记录
+
+有效 smoke：
+
+```text
+OS: Linux VM
+GPU: RTX 4090 24GB present in nvidia-smi
+ncnn runtime: CPU path, threads=8
+model: qwen3_asr_0_6b_runtime_text128
+PyTorch model: Qwen/Qwen3-ASR-0.6B
+```
+
+限制：
+
+- 当前 Vulkan 只枚举到 `llvmpipe`，不是 RTX 4090 Vulkan timing。
+- 原始 ncnn build 在该 VM 上触发 `get_data_cache_size()` 的 `SIGFPE`。本次 Linux
+  ncnn smoke 使用临时 patched ncnn build 绕过 CPU cache parsing 除零问题。
+
 ## 当前报告文件
 
-本机生成的报告在：
+本机和 VM 生成的报告在：
 
 ```text
 /Users/link/llk/test_audio/chinese_fixtures/eval_report.json
 /Users/link/llk/test_audio/chinese_fixtures/eval_report.md
 /Users/link/llk/test_audio/chinese_fixtures/platform_smoke.json
 /Users/link/llk/test_audio/chinese_fixtures/platform_smoke.md
+/data/results/qwen3_asr/eval_vm_linux_patched.json
+/data/results/qwen3_asr/eval_vm_linux_patched.md
 ```
 
-这些本地输出不提交到 notes 仓库；公开复测入口在实现仓库的 `tests/qwen3_asr`。
+这些输出不提交到 notes 仓库；公开复测入口在实现仓库的 `tests/qwen3_asr`。
 
 ## 旧测试的处理
 
