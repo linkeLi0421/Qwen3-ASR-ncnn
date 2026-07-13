@@ -11,7 +11,7 @@ https://github.com/linkeLi0421/ncnn_llm/tree/qwen3-asr-export
 当前实现分支提交：
 
 ```text
-5cf4fb6 Support Linux memory metrics for Qwen3-ASR fixtures
+68fd9af Align Qwen3-ASR forced language prompt
 ```
 
 ## 当前结论
@@ -19,6 +19,10 @@ https://github.com/linkeLi0421/ncnn_llm/tree/qwen3-asr-export
 核心转换路径已经证明可行：Qwen3-ASR 可以拆成 `audio_encoder`、`text_embed`、
 `text_backbone`、`lm_head` 等 ncnn 静态图模块，并由 C++ runtime 补齐 WAV 读取、
 log-mel、prompt/audio token 组装、greedy decode 和输出解析。
+
+最新一轮 Linux VM 验证修正了 forced language prompt：C++ runtime 现在按官方
+PyTorch prompt 追加 `language Chinese<asr_text>`，首个固定 chunk 的 `prompt_len`
+与 PyTorch 对齐为 51，短中文首 token 也对齐为 `100644`。
 
 但这个 issue 还不能按“完成”处理。新的完成标准是分层验证，而不是只看一个 demo
 音频能否跑通。
@@ -30,7 +34,7 @@ log-mel、prompt/audio token 组装、greedy decode 和输出解析。
 | 音频前处理 parity | ncnn C++ mel summary 和 PyTorch mel summary 已有；数值 diff 待补 |
 | 三类中文 fixture | 本机 TTS fixture 已有：短中文、较长中文、中英数字混合；真人中文待补 |
 | normalized text 对齐 | PyTorch baseline 已补；ncnn strict：1/3 通过；ncnn semantic：2/3 通过 |
-| 模块级定位 | ncnn 侧 audio embedding、merged embedding、hidden、logits summary 已有；PyTorch 对应模块误差表待补 |
+| 模块级定位 | ncnn 侧 audio embedding、merged embedding、hidden、logits summary 已有；PyTorch 对应模块 summary 已补；数值误差表待补 |
 | 多平台 smoke | macOS CPU-only 已有；Linux CPU smoke 已有；Windows 待补 |
 | 最小复测命令 | `qwen3_asr_main` 和 `tests/qwen3_asr/run_fixture.sh` 已支持 |
 
@@ -38,9 +42,9 @@ log-mel、prompt/audio token 组装、greedy decode 和输出解析。
 
 | fixture | ncnn strict | ncnn semantic | PyTorch strict | PyTorch semantic | chunks | Linux RTF | Linux peak RSS | 结论 |
 | --- | --- | --- | --- | --- | ---: | ---: | ---: | --- |
-| `zh_short_tts` | PASS | PASS | PASS | PASS | 2 | 5.79 | 4739.0 MiB | 短中文通过 |
-| `zh_long_tts` | FAIL | FAIL | PASS | PASS | 9 | 4.72 | 4738.5 MiB | PyTorch 正确，ncnn 长音频仍有 `剪检查`、`对其` |
-| `zh_mixed_tts` | FAIL | PASS | FAIL | FAIL | 4 | 4.54 | 4739.1 MiB | PyTorch 自身输出 `Open API`，fixture 期望 `OpenAI API` 过严；ncnn 还会把英文缩写拆散 |
+| `zh_short_tts` | PASS | PASS | PASS | PASS | 2 | 4.54 | 4738.9 MiB | prompt 对齐后短中文通过 |
+| `zh_long_tts` | FAIL | FAIL | PASS | PASS | 9 | 3.60 | 4738.8 MiB | PyTorch 正确，ncnn 长音频仍有 `剪检查`、`对其` |
+| `zh_mixed_tts` | FAIL | PASS | FAIL | FAIL | 4 | 3.72 | 4739.0 MiB | PyTorch 自身输出 `Open API`，fixture 期望 `OpenAI API` 过严；ncnn 英文缩写仍需后处理/解码契约确认 |
 
 Linux VM 说明：RTX 4090 可由 `nvidia-smi` 看到，但当前 Vulkan 只枚举到
 `llvmpipe`，所以上表不是 4090/Vulkan 性能。原始 ncnn build 在该 VM 上触发

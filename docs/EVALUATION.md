@@ -33,9 +33,9 @@ Linux VM 上使用同一批 fixture 跑原版 PyTorch baseline 和 ncnn CPU runt
 
 | fixture | ncnn strict | ncnn semantic | PyTorch strict | PyTorch semantic | chunks | Linux RTF | Linux peak RSS | 说明 |
 | --- | --- | --- | --- | --- | ---: | ---: | ---: | --- |
-| `zh_short_tts` | PASS | PASS | PASS | PASS | 2 | 5.79 | 4739.0 MiB | 短中文通过 |
-| `zh_long_tts` | FAIL | FAIL | PASS | PASS | 9 | 4.72 | 4738.5 MiB | PyTorch 正确，ncnn 长音频仍有 `剪检查`、`对其` |
-| `zh_mixed_tts` | FAIL | PASS | FAIL | FAIL | 4 | 4.54 | 4739.1 MiB | PyTorch 自身输出 `Open API`，fixture expected `OpenAI API` 过严；ncnn 还会把英文缩写拆散 |
+| `zh_short_tts` | PASS | PASS | PASS | PASS | 2 | 4.54 | 4738.9 MiB | forced language prompt 对齐后短中文通过 |
+| `zh_long_tts` | FAIL | FAIL | PASS | PASS | 9 | 3.60 | 4738.8 MiB | PyTorch 正确，ncnn 长音频仍有 `剪检查`、`对其` |
+| `zh_mixed_tts` | FAIL | PASS | FAIL | FAIL | 4 | 3.72 | 4739.0 MiB | PyTorch 自身输出 `Open API`，fixture expected `OpenAI API` 过严；ncnn 英文缩写仍需后处理/解码契约确认 |
 
 这个结果把问题拆开了：
 
@@ -44,6 +44,15 @@ Linux VM 上使用同一批 fixture 跑原版 PyTorch baseline 和 ncnn CPU runt
   对同一音频通过。
 - `zh_mixed_tts` 不能作为纯 ncnn 转换失败结论，因为 PyTorch baseline 本身也不满足
   这个 fixture 的 strict expected。
+
+本轮还修正了 C++ prompt 构造：当指定 `--language Chinese` 时，runtime 会按官方
+PyTorch prompt 追加 `language Chinese<asr_text>`。首个固定 chunk 的 `prompt_len`
+从旧实现的 48 对齐到 PyTorch 的 51，短中文首个 greedy token 与 PyTorch 同为
+`100644`。
+
+PyTorch 模块 summary 也已经生成，覆盖 fixed overlap chunk 上的 audio embedding、
+merged embedding、hidden、logits 和 selected logits。当前仍缺的是把这些 summary
+与 ncnn summary 做逐项数值误差表。
 
 ## macOS 本机结果
 
@@ -85,6 +94,8 @@ PyTorch model: Qwen/Qwen3-ASR-0.6B
 /Users/link/llk/test_audio/chinese_fixtures/platform_smoke.md
 /data/results/qwen3_asr/eval_vm_linux_patched.json
 /data/results/qwen3_asr/eval_vm_linux_patched.md
+/data/results/qwen3_asr/eval_vm_forced_prompt.json
+/data/results/qwen3_asr/eval_vm_forced_prompt.md
 ```
 
 这些输出不提交到 notes 仓库；公开复测入口在实现仓库的 `tests/qwen3_asr`。
