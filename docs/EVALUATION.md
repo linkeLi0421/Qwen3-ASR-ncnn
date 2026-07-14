@@ -54,6 +54,37 @@ PyTorch 模块 summary 也已经生成，覆盖 fixed overlap chunk 上的 audio
 merged embedding、hidden、logits 和 selected logits。当前仍缺的是把这些 summary
 与 ncnn summary 做逐项数值误差表。
 
+## Long-Window KV 结果
+
+进一步实验显示，`zh_long_tts` 失败并不是单纯的 ncnn 算子误差。把同样的 9 个
+256-frame chunk 交给 PyTorch 原版 `transcribe()` 逐块识别，也会得到 `主要用于剪`
+和 `文本对其`。官方 full-audio `transcribe()` 对这个 18.78 秒样例不会切成 2.56 秒
+短窗，而是整段输入：
+
+```text
+input_features: [1, 128, 1878]
+audio_features: [244, 1024]
+prompt_len: 262
+```
+
+因此旧 `text_seq_len=128` 模型无法表示官方路径。重新导出：
+
+```text
+audio_frames=1878
+text_seq_len=512
+kv_cache_len=511
+```
+
+并修正 KV prefill cache 裁剪后，Linux CPU ncnn 结果为：
+
+| fixture | mode | strict | semantic | chunks | wall time | peak RSS | text |
+| --- | --- | --- | --- | ---: | ---: | ---: | --- |
+| `zh_long_tts` | full1878 text512 KV | PASS | PASS | 1 | 70.29s | 19.31 GiB | `这是一段较长的中文语音测试。我们希望模型能够稳定地识别连续的句子，并且在音频变长以后仍然保持合理的文本输出。这个样例主要用于检查切块拼接以及端到端文本对齐是否可靠。` |
+
+KV 修复点：pnnx trace 的 prefill KV cache 是静态 512 长度，但真实 prompt_len 是 262。
+runtime 必须在 prefill 后把 K/V cache 裁到真实 prompt 长度，否则 decode 会 attend 到
+padding cache，第二个 token 开始就会错。
+
 ## macOS 本机结果
 
 | fixture | strict | semantic | chunks | RTF | peak RSS | notes |
@@ -96,6 +127,8 @@ PyTorch model: Qwen/Qwen3-ASR-0.6B
 /data/results/qwen3_asr/eval_vm_linux_patched.md
 /data/results/qwen3_asr/eval_vm_forced_prompt.json
 /data/results/qwen3_asr/eval_vm_forced_prompt.md
+/data/results/qwen3_asr/linux_ncnn_full1878_text512_kv_full/zh_long_tts.json
+/data/results/qwen3_asr/linux_ncnn_full1878_text512_kv_full/zh_long_tts_time.txt
 ```
 
 这些输出不提交到 notes 仓库；公开复测入口在实现仓库的 `tests/qwen3_asr`。

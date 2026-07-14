@@ -15,7 +15,7 @@ https://github.com/linkeLi0421/Qwen3-ASR-ncnn
 当前实现分支提交：
 
 ```text
-68fd9af Align Qwen3-ASR forced language prompt
+828cd79 Support long Qwen3-ASR audio windows
 ```
 
 ## 1. 当前结论
@@ -71,7 +71,7 @@ tests/qwen3_asr
 | --- | --- |
 | 音频前处理 parity | ncnn C++ mel summary 和 PyTorch mel summary 已有；数值 diff 待补 |
 | 三类中文 fixture | 本机 TTS fixture 已有：短中文、较长中文、中英数字混合；真人中文待补 |
-| normalized text 对齐 | PyTorch baseline 已补；ncnn strict：1/3 通过；ncnn semantic：2/3 通过 |
+| normalized text 对齐 | text128 旧基线：ncnn strict：1/3，semantic：2/3；long-window KV：`zh_long_tts` 已通过 |
 | 模块级定位 | ncnn 侧 audio embedding、merged embedding、hidden、logits summary 已有；PyTorch fixed-chunk 模块 summary 已补；数值误差表待补 |
 | 多平台 smoke | macOS CPU-only 已有；Linux CPU smoke 已有；Windows 待补 |
 | 最小复测命令 | `qwen3_asr_main --model ... --audio-wav ... --text-out ... --json-out ... --dump-mel-summary ...` 已支持 |
@@ -86,6 +86,28 @@ tests/qwen3_asr
 
 这里 strict normalized 是正式输出契约。semantic normalized 只用来标记缩写、空格、
 标点等可解释差异，不能替代 strict 通过。
+
+后续定位发现，`zh_long_tts` 的旧失败不是单纯 ncnn 算子误差，而是 256-frame 独立
+chunk 路径不等价于官方 `transcribe()`。同样的 9 个 256-frame chunk 交给 PyTorch
+逐块识别，也会得到 `主要用于剪` 和 `文本对其`。官方对这个 18.78 秒样例会整段输入，
+对应：
+
+```text
+input_features: [1, 128, 1878]
+audio_features: [244, 1024]
+prompt_len: 262
+```
+
+因此旧 `text_seq_len=128` 模型无法表达官方路径。我重新导出
+`audio_frames=1878`、`text_seq_len=512`、`kv_cache_len=511`，并修正 runtime 中
+KV prefill cache 需要裁到真实 prompt_len 的问题后，Linux CPU ncnn 输出为：
+
+```text
+这是一段较长的中文语音测试。我们希望模型能够稳定地识别连续的句子，并且在音频变长以后仍然保持合理的文本输出。这个样例主要用于检查切块拼接以及端到端文本对齐是否可靠。
+```
+
+这个结果与 PyTorch normalized text 对齐。代价是模型包和内存明显增加：CPU 路径本次
+完整生成用时约 70.29 秒，峰值 RSS 约 19.31 GiB。
 
 Linux VM 说明：RTX 4090 可以由 `nvidia-smi` 看到，但当前 Vulkan 只枚举到
 `llvmpipe`，所以这里不是 4090/Vulkan 性能。原始 ncnn build 在这个 VM 上会在
@@ -131,7 +153,7 @@ tests/qwen3_asr/run_fixture.sh \
 ## 5. 当前限制
 
 - 还没有真实中文录音 fixture。
-- 长中文 strict 文本仍未对齐。
+- long-window KV 路径还没有重跑三类 fixture 的完整表格。
 - 当前 macOS 和 Linux smoke 都是 CPU runtime 结果，不代表 GPU/Vulkan 性能。
 - Windows 最新分层 smoke 待补。
 - 4090/Vulkan 需要单独验证设备可见性和输出可靠性。
@@ -141,12 +163,13 @@ tests/qwen3_asr/run_fixture.sh \
 
 下一步不应继续扩大零散 demo，而应该补齐模块级定位和真实音频覆盖：
 
-1. 对比 ncnn 和 PyTorch 的 `max_abs`、`mean_abs`、`p99_abs`、cosine similarity、
+1. 用 long-window KV 模型重跑短中文、长中文、中英数字混合三类 fixture。
+2. 对比 ncnn 和 PyTorch 的 `max_abs`、`mean_abs`、`p99_abs`、cosine similarity、
    top-k logits agreement。
-2. 用真实中文录音补充短中文、长中文、中英数字混合三类 fixture。
-3. 做 Windows smoke。
-4. 单独排查 4090/Vulkan 设备可见性。
-5. 将 Linux VM 上发现的 ncnn CPU cache parsing 问题整理为独立上游反馈或构建说明。
+3. 用真实中文录音补充短中文、长中文、中英数字混合三类 fixture。
+4. 做 Windows smoke。
+5. 单独排查 4090/Vulkan 设备可见性。
+6. 将 Linux VM 上发现的 ncnn CPU cache parsing 问题整理为独立上游反馈或构建说明。
 
 所以当前更准确的状态是：ncnn 转换和 C++ runtime 路径已经打通，但还需要 PyTorch
 模块级对齐、真实音频验证和 GPU/Vulkan 验证，才能说这个 issue 真正完成。
