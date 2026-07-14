@@ -71,7 +71,7 @@ tests/qwen3_asr
 | --- | --- |
 | 音频前处理 parity | ncnn C++ mel summary 和 PyTorch mel summary 已有；数值 diff 待补 |
 | 三类中文 fixture | 本机 TTS fixture 已有：短中文、较长中文、中英数字混合；真人中文待补 |
-| normalized text 对齐 | text128 旧基线：ncnn strict：1/3，semantic：2/3；long-window KV：`zh_long_tts` 已通过 |
+| normalized text 对齐 | text128 旧基线：ncnn strict：1/3，semantic：2/3；long-window KV：ncnn strict：2/3，semantic：2/3 |
 | 模块级定位 | ncnn 侧 audio embedding、merged embedding、hidden、logits summary 已有；PyTorch fixed-chunk 模块 summary 已补；数值误差表待补 |
 | 多平台 smoke | macOS CPU-only 已有；Linux CPU smoke 已有；Windows 待补 |
 | 最小复测命令 | `qwen3_asr_main --model ... --audio-wav ... --text-out ... --json-out ... --dump-mel-summary ...` 已支持 |
@@ -106,8 +106,17 @@ KV prefill cache 需要裁到真实 prompt_len 的问题后，Linux CPU ncnn 输
 这是一段较长的中文语音测试。我们希望模型能够稳定地识别连续的句子，并且在音频变长以后仍然保持合理的文本输出。这个样例主要用于检查切块拼接以及端到端文本对齐是否可靠。
 ```
 
-这个结果与 PyTorch normalized text 对齐。代价是模型包和内存明显增加：CPU 路径本次
-完整生成用时约 70.29 秒，峰值 RSS 约 19.31 GiB。
+这个结果与 PyTorch normalized text 对齐。三类 TTS fixture 的 long-window KV 复测：
+
+| fixture | ncnn strict | ncnn semantic | PyTorch strict | PyTorch semantic | chunks | RTF | wall time | peak RSS |
+| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: |
+| `zh_short_tts` | PASS | PASS | PASS | PASS | 1 | 10.00 | 40.61s | 19.37 GiB |
+| `zh_long_tts` | PASS | PASS | PASS | PASS | 1 | 3.82 | 72.98s | 19.37 GiB |
+| `zh_mixed_tts` | FAIL | FAIL | FAIL | FAIL | 1 | 5.66 | 52.39s | 19.38 GiB |
+
+`zh_mixed_tts` 这里不能作为 ncnn 独有失败结论，因为 ncnn 和 PyTorch baseline 都输出
+`OpenAPI`，而 fixture expected 是 `OpenAI API`。代价是模型包和内存明显增加，CPU
+路径峰值 RSS 约 19.4 GiB。
 
 Linux VM 说明：RTX 4090 可以由 `nvidia-smi` 看到，但当前 Vulkan 只枚举到
 `llvmpipe`，所以这里不是 4090/Vulkan 性能。原始 ncnn build 在这个 VM 上会在
@@ -153,7 +162,7 @@ tests/qwen3_asr/run_fixture.sh \
 ## 5. 当前限制
 
 - 还没有真实中文录音 fixture。
-- long-window KV 路径还没有重跑三类 fixture 的完整表格。
+- long-window KV 路径还没有重生成对应 PyTorch mel/module summary。
 - 当前 macOS 和 Linux smoke 都是 CPU runtime 结果，不代表 GPU/Vulkan 性能。
 - Windows 最新分层 smoke 待补。
 - 4090/Vulkan 需要单独验证设备可见性和输出可靠性。
@@ -163,7 +172,7 @@ tests/qwen3_asr/run_fixture.sh \
 
 下一步不应继续扩大零散 demo，而应该补齐模块级定位和真实音频覆盖：
 
-1. 用 long-window KV 模型重跑短中文、长中文、中英数字混合三类 fixture。
+1. 按 `audio_frames=1878` 重生成 PyTorch mel/module summary。
 2. 对比 ncnn 和 PyTorch 的 `max_abs`、`mean_abs`、`p99_abs`、cosine similarity、
    top-k logits agreement。
 3. 用真实中文录音补充短中文、长中文、中英数字混合三类 fixture。

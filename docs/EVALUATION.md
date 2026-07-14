@@ -77,13 +77,24 @@ kv_cache_len=511
 
 并修正 KV prefill cache 裁剪后，Linux CPU ncnn 结果为：
 
-| fixture | mode | strict | semantic | chunks | wall time | peak RSS | text |
-| --- | --- | --- | --- | ---: | ---: | ---: | --- |
-| `zh_long_tts` | full1878 text512 KV | PASS | PASS | 1 | 70.29s | 19.31 GiB | `这是一段较长的中文语音测试。我们希望模型能够稳定地识别连续的句子，并且在音频变长以后仍然保持合理的文本输出。这个样例主要用于检查切块拼接以及端到端文本对齐是否可靠。` |
+| fixture | mode | ncnn strict | ncnn semantic | PyTorch strict | PyTorch semantic | chunks | RTF | wall time | peak RSS |
+| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: |
+| `zh_short_tts` | full1878 text512 KV | PASS | PASS | PASS | PASS | 1 | 10.00 | 40.61s | 19.37 GiB |
+| `zh_long_tts` | full1878 text512 KV | PASS | PASS | PASS | PASS | 1 | 3.82 | 72.98s | 19.37 GiB |
+| `zh_mixed_tts` | full1878 text512 KV | FAIL | FAIL | FAIL | FAIL | 1 | 5.66 | 52.39s | 19.38 GiB |
 
 KV 修复点：pnnx trace 的 prefill KV cache 是静态 512 长度，但真实 prompt_len 是 262。
 runtime 必须在 prefill 后把 K/V cache 裁到真实 prompt 长度，否则 decode 会 attend 到
 padding cache，第二个 token 开始就会错。
+
+`zh_mixed_tts` 仍 strict fail，但 long-window ncnn 和 PyTorch baseline 都输出
+`OpenAPI`，而 fixture expected 是 `OpenAI API`。这说明该样例当前主要是 expected/output
+契约问题，不是 ncnn 独有转换失败。
+
+当前 long-window 评估复用了旧 PyTorch mel/module summary，所以报告中会出现
+`mel summary shape/metadata mismatch`。这是预期的：旧 summary 是 256-frame 固定
+chunk，long-window 路径是 1878-frame 整段输入。后续需要重生成 long-window PyTorch
+summary 后再比较前处理 parity。
 
 ## macOS 本机结果
 
@@ -129,6 +140,9 @@ PyTorch model: Qwen/Qwen3-ASR-0.6B
 /data/results/qwen3_asr/eval_vm_forced_prompt.md
 /data/results/qwen3_asr/linux_ncnn_full1878_text512_kv_full/zh_long_tts.json
 /data/results/qwen3_asr/linux_ncnn_full1878_text512_kv_full/zh_long_tts_time.txt
+/data/results/qwen3_asr/eval_vm_long_window_kv.json
+/data/results/qwen3_asr/eval_vm_long_window_kv.md
+/data/results/qwen3_asr/linux_ncnn_full1878_text512_kv_fixtures/
 ```
 
 这些输出不提交到 notes 仓库；公开复测入口在实现仓库的 `tests/qwen3_asr`。
