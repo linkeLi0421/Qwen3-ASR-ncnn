@@ -15,6 +15,7 @@ https://github.com/linkeLi0421/Qwen3-ASR-ncnn
 当前实现分支提交：
 
 ```text
+35174d2 Align Qwen3-ASR module summaries
 828cd79 Support long Qwen3-ASR audio windows
 ```
 
@@ -72,7 +73,7 @@ tests/qwen3_asr
 | 音频前处理 parity | ncnn C++ mel summary 和 PyTorch mel summary 已有；数值 diff 待补 |
 | 三类中文 fixture | 本机 TTS fixture 已有：短中文、较长中文、中英数字混合；真人中文待补 |
 | normalized text 对齐 | text128 旧基线：ncnn strict：1/3，semantic：2/3；long-window KV：ncnn strict：2/3，semantic：2/3 |
-| 模块级定位 | ncnn 侧 audio embedding、merged embedding、hidden、logits summary 已有；PyTorch fixed-chunk 模块 summary 已补；数值误差表待补 |
+| 模块级定位 | long-window 静态路径的 ncnn/PyTorch summary 已同 shape 对齐，首 token 一致；raw tensor 数值误差表待补 |
 | 多平台 smoke | macOS CPU-only 已有；Linux CPU smoke 已有；Windows 待补 |
 | 最小复测命令 | `qwen3_asr_main --model ... --audio-wav ... --text-out ... --json-out ... --dump-mel-summary ...` 已支持 |
 
@@ -118,6 +119,16 @@ KV prefill cache 需要裁到真实 prompt_len 的问题后，Linux CPU ncnn 输
 `OpenAPI`，而 fixture expected 是 `OpenAI API`。代价是模型包和内存明显增加，CPU
 路径峰值 RSS 约 19.4 GiB。
 
+补充说明：模块级 summary 需要区分官方端到端 PyTorch baseline 和 ncnn 静态图定位。
+官方 `transcribe()` 会按真实音频长度使用 feature mask，因此短音频不会产生 244 个
+audio tokens；但 ncnn 静态图没有 feature mask，固定 1878-frame 输入会输出 244 个
+audio embeddings。为了定位 ncnn 静态图误差，我另外生成了 static PyTorch module
+summary：固定 `input_features=[1,128,1878]`、全 1 feature mask、244 个 audio
+placeholder。修正 ncnn debug summary 只统计真实 `prompt_len=262` 后，三条 fixture 的
+module summary shape 均对齐，首个 greedy token 分别为 `100644`、`43288`、`100644`，
+与 ncnn 一致。当前还没有 raw tensor dump，所以还不能给出完整 `max_abs/p99/cosine`
+数值误差表。
+
 Linux VM 说明：RTX 4090 可以由 `nvidia-smi` 看到，但当前 Vulkan 只枚举到
 `llvmpipe`，所以这里不是 4090/Vulkan 性能。原始 ncnn build 在这个 VM 上会在
 `get_data_cache_size()` 触发 CPU cache parsing 的 `SIGFPE`；本次 Linux smoke 使用
@@ -162,7 +173,7 @@ tests/qwen3_asr/run_fixture.sh \
 ## 5. 当前限制
 
 - 还没有真实中文录音 fixture。
-- long-window KV 路径还没有重生成对应 PyTorch mel/module summary。
+- raw tensor 级模块误差表还没有补，例如 `max_abs`、`p99_abs`、cosine、top-k logits agreement。
 - 当前 macOS 和 Linux smoke 都是 CPU runtime 结果，不代表 GPU/Vulkan 性能。
 - Windows 最新分层 smoke 待补。
 - 4090/Vulkan 需要单独验证设备可见性和输出可靠性。
@@ -172,13 +183,12 @@ tests/qwen3_asr/run_fixture.sh \
 
 下一步不应继续扩大零散 demo，而应该补齐模块级定位和真实音频覆盖：
 
-1. 按 `audio_frames=1878` 重生成 PyTorch mel/module summary。
-2. 对比 ncnn 和 PyTorch 的 `max_abs`、`mean_abs`、`p99_abs`、cosine similarity、
+1. 补 raw tensor dump，并对比 ncnn 和 PyTorch 的 `max_abs`、`mean_abs`、`p99_abs`、cosine similarity、
    top-k logits agreement。
-3. 用真实中文录音补充短中文、长中文、中英数字混合三类 fixture。
-4. 做 Windows smoke。
-5. 单独排查 4090/Vulkan 设备可见性。
-6. 将 Linux VM 上发现的 ncnn CPU cache parsing 问题整理为独立上游反馈或构建说明。
+2. 用真实中文录音补充短中文、长中文、中英数字混合三类 fixture。
+3. 做 Windows smoke。
+4. 单独排查 4090/Vulkan 设备可见性。
+5. 将 Linux VM 上发现的 ncnn CPU cache parsing 问题整理为独立上游反馈或构建说明。
 
 所以当前更准确的状态是：ncnn 转换和 C++ runtime 路径已经打通，但还需要 PyTorch
-模块级对齐、真实音频验证和 GPU/Vulkan 验证，才能说这个 issue 真正完成。
+raw tensor 级误差、真实音频验证和 GPU/Vulkan 验证，才能说这个 issue 真正完成。

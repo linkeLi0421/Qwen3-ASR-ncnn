@@ -91,10 +91,19 @@ padding cache，第二个 token 开始就会错。
 `OpenAPI`，而 fixture expected 是 `OpenAI API`。这说明该样例当前主要是 expected/output
 契约问题，不是 ncnn 独有转换失败。
 
-当前 long-window 评估复用了旧 PyTorch mel/module summary，所以报告中会出现
-`mel summary shape/metadata mismatch`。这是预期的：旧 summary 是 256-frame 固定
-chunk，long-window 路径是 1878-frame 整段输入。后续需要重生成 long-window PyTorch
-summary 后再比较前处理 parity。
+后续补充了 long-window PyTorch summary。mel summary 已使用同样的
+`input_features=[1,128,1878]`。module summary 需要特别区分两条路径：
+
+- 官方 PyTorch `transcribe()` 会按真实音频长度使用 feature mask，短音频的 audio
+  tokens 不是 244；
+- ncnn 静态图没有 feature mask，固定 1878-frame 输入会得到 244 个 audio tokens。
+
+因此模块级定位使用 static PyTorch summary 来模拟 ncnn：固定 1878-frame feature、
+全 1 feature mask、244 个 audio placeholder。修正 ncnn debug summary 只统计真实
+`prompt_len=262` 后，三类 fixture 均得到 `module summary aligned`，首个 greedy token
+分别为 `100644`、`43288`、`100644`，与 ncnn 一致。当前仍没有 raw tensor dump，所以
+这里只能比较 shape、summary stats 和 selected logits 前若干值；`max_abs/p99/cosine`
+仍待补。
 
 ## macOS 本机结果
 
@@ -143,6 +152,10 @@ PyTorch model: Qwen/Qwen3-ASR-0.6B
 /data/results/qwen3_asr/eval_vm_long_window_kv.json
 /data/results/qwen3_asr/eval_vm_long_window_kv.md
 /data/results/qwen3_asr/linux_ncnn_full1878_text512_kv_fixtures/
+/data/results/qwen3_asr/eval_vm_long_window_kv_prompt_summary_fix_static_module.json
+/data/results/qwen3_asr/eval_vm_long_window_kv_prompt_summary_fix_static_module.md
+/data/results/qwen3_asr/linux_ncnn_full1878_text512_kv_prompt_summary_fix/
+/data/results/qwen3_asr/pytorch_long_window_1878_static_module/
 ```
 
 这些输出不提交到 notes 仓库；公开复测入口在实现仓库的 `tests/qwen3_asr`。
