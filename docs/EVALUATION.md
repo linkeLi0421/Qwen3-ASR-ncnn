@@ -101,9 +101,19 @@ padding cache，第二个 token 开始就会错。
 因此模块级定位使用 static PyTorch summary 来模拟 ncnn：固定 1878-frame feature、
 全 1 feature mask、244 个 audio placeholder。修正 ncnn debug summary 只统计真实
 `prompt_len=262` 后，三类 fixture 均得到 `module summary aligned`，首个 greedy token
-分别为 `100644`、`43288`、`100644`，与 ncnn 一致。当前仍没有 raw tensor dump，所以
-这里只能比较 shape、summary stats 和 selected logits 前若干值；`max_abs/p99/cosine`
-仍待补。
+分别为 `100644`、`43288`、`100644`，与 ncnn 一致。
+
+最新实现分支已补 raw tensor parity 入口：
+
+```bash
+tests/qwen3_asr/run_fixture.sh ... --frames 1878 --dump-module-raw
+tests/qwen3_asr/run_pytorch_fixtures.py ... --frames 1878 --dump-module-raw
+tests/qwen3_asr/evaluate_fixtures.py ...
+```
+
+当 ncnn/PyTorch summary 都带 `raw_path` 时，评估脚本会计算 `max_abs`、`mean_abs`、
+`p99_abs`、cosine，以及 selected logits 的 top-5 agreement。当前还需要在 VM 上
+重跑三条 fixture 生成真实数值表。
 
 ## macOS 本机结果
 

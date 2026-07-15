@@ -25,10 +25,12 @@
 - 已补 long-window 静态 module summary：PyTorch 侧用固定 1878-frame input features、
   全 1 feature mask 和 244 个 audio placeholder 来模拟 ncnn 静态图，三类 fixture
   的 module summary shape 和首 token 均对齐。
+- 实现分支已补 raw tensor parity 入口：ncnn 和 PyTorch 都可写 `.f32` raw tensor，
+  评估脚本可计算 `max_abs`、`mean_abs`、`p99_abs`、cosine 和 selected logits top-5 agreement。
 
 未完成：
 
-- PyTorch 与 ncnn 的模块级数值误差表。
+- VM 上三条 fixture 的真实 raw tensor 数值误差表。
 - 真实中文录音 fixture。
 - Windows 最新分层 smoke。
 - 4090/Vulkan 有效性能验证。
@@ -40,7 +42,7 @@
 | 音频前处理 parity | ncnn C++ mel summary 和 PyTorch mel summary 已有 | 数值 diff |
 | 三类中文 fixture | 本机 TTS fixture 已有，PyTorch baseline 已有 | 真人中文录音 |
 | normalized text 对齐 | text128 旧基线：ncnn strict 1/3，semantic 2/3；long-window KV：ncnn strict 2/3，semantic 2/3 | 混合样例 expected/output 契约确认 |
-| 模块级定位 | long-window 静态路径 ncnn/PyTorch summary 已同 shape 对齐，首 token 一致 | raw tensor 数值误差表 |
+| 模块级定位 | long-window 静态路径 ncnn/PyTorch summary 已同 shape 对齐，首 token 一致；raw dump/metrics 入口已实现 | VM 真实数值表 |
 | 多平台 smoke | macOS CPU-only、Linux CPU 已有 | Windows smoke，4090/Vulkan |
 | 最小复测命令 | 已支持 | 在最终报告里固定命令和输出契约 |
 

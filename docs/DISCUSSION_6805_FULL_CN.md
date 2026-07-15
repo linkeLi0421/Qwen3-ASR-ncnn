@@ -15,6 +15,7 @@ https://github.com/linkeLi0421/Qwen3-ASR-ncnn
 当前实现分支提交：
 
 ```text
+dcc1955 Add Qwen3-ASR raw tensor parity metrics
 35174d2 Align Qwen3-ASR module summaries
 828cd79 Support long Qwen3-ASR audio windows
 ```
@@ -73,7 +74,7 @@ tests/qwen3_asr
 | 音频前处理 parity | ncnn C++ mel summary 和 PyTorch mel summary 已有；数值 diff 待补 |
 | 三类中文 fixture | 本机 TTS fixture 已有：短中文、较长中文、中英数字混合；真人中文待补 |
 | normalized text 对齐 | text128 旧基线：ncnn strict：1/3，semantic：2/3；long-window KV：ncnn strict：2/3，semantic：2/3 |
-| 模块级定位 | long-window 静态路径的 ncnn/PyTorch summary 已同 shape 对齐，首 token 一致；raw tensor 数值误差表待补 |
+| 模块级定位 | long-window 静态路径的 ncnn/PyTorch summary 已同 shape 对齐，首 token 一致；raw tensor dump 和误差指标入口已实现，真实 VM 数值待跑 |
 | 多平台 smoke | macOS CPU-only 已有；Linux CPU smoke 已有；Windows 待补 |
 | 最小复测命令 | `qwen3_asr_main --model ... --audio-wav ... --text-out ... --json-out ... --dump-mel-summary ...` 已支持 |
 
@@ -126,8 +127,10 @@ audio embeddings。为了定位 ncnn 静态图误差，我另外生成了 static
 summary：固定 `input_features=[1,128,1878]`、全 1 feature mask、244 个 audio
 placeholder。修正 ncnn debug summary 只统计真实 `prompt_len=262` 后，三条 fixture 的
 module summary shape 均对齐，首个 greedy token 分别为 `100644`、`43288`、`100644`，
-与 ncnn 一致。当前还没有 raw tensor dump，所以还不能给出完整 `max_abs/p99/cosine`
-数值误差表。
+与 ncnn 一致。最新实现分支已经补了 raw tensor parity 入口：ncnn 和 PyTorch 都可以
+写出 `.f32` raw tensor，评估脚本在双方都有 `raw_path` 时会计算 `max_abs`、
+`mean_abs`、`p99_abs`、cosine，以及 selected logits 的 top-5 agreement。真实三条
+fixture 的数值表还需要在 VM 上重跑生成。
 
 Linux VM 说明：RTX 4090 可以由 `nvidia-smi` 看到，但当前 Vulkan 只枚举到
 `llvmpipe`，所以这里不是 4090/Vulkan 性能。原始 ncnn build 在这个 VM 上会在
@@ -173,22 +176,22 @@ tests/qwen3_asr/run_fixture.sh \
 ## 5. 当前限制
 
 - 还没有真实中文录音 fixture。
-- raw tensor 级模块误差表还没有补，例如 `max_abs`、`p99_abs`、cosine、top-k logits agreement。
+- raw tensor 级模块误差表入口已补，但还没有在 VM 上生成三条 fixture 的真实数值。
 - 当前 macOS 和 Linux smoke 都是 CPU runtime 结果，不代表 GPU/Vulkan 性能。
 - Windows 最新分层 smoke 待补。
 - 4090/Vulkan 需要单独验证设备可见性和输出可靠性。
-- PyTorch 与 ncnn 的模块级数值误差表还没补齐；当前已有双方 summary。
+- PyTorch 与 ncnn 的模块级数值误差表还没补齐；当前已有双方 summary 和 raw metrics 入口。
 
 ## 6. 建议下一步
 
 下一步不应继续扩大零散 demo，而应该补齐模块级定位和真实音频覆盖：
 
-1. 补 raw tensor dump，并对比 ncnn 和 PyTorch 的 `max_abs`、`mean_abs`、`p99_abs`、cosine similarity、
-   top-k logits agreement。
+1. 在 VM 上用 `--dump-module-raw` 重跑三条 long-window fixture，生成 `max_abs`、`mean_abs`、
+   `p99_abs`、cosine similarity 和 top-k logits agreement。
 2. 用真实中文录音补充短中文、长中文、中英数字混合三类 fixture。
 3. 做 Windows smoke。
 4. 单独排查 4090/Vulkan 设备可见性。
 5. 将 Linux VM 上发现的 ncnn CPU cache parsing 问题整理为独立上游反馈或构建说明。
 
 所以当前更准确的状态是：ncnn 转换和 C++ runtime 路径已经打通，但还需要 PyTorch
-raw tensor 级误差、真实音频验证和 GPU/Vulkan 验证，才能说这个 issue 真正完成。
+VM 上的 raw tensor 级误差、真实音频验证和 GPU/Vulkan 验证，才能说这个 issue 真正完成。
